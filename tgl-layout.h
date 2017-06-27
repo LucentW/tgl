@@ -1,4 +1,4 @@
-/*
+/* 
     This file is part of tgl-library
 
     This library is free software; you can redistribute it and/or
@@ -120,9 +120,9 @@
 #define TGL_PERMANENT_ID_SIZE 24
 #pragma pack(push,4)
 
-typedef struct {
-  int peer_type;
-  int peer_id;
+typedef struct { 
+  int peer_type; 
+  int peer_id; 
   long long access_hash;
 } tgl_peer_id_t;
 
@@ -197,7 +197,8 @@ tgl_message_entity_bold,
 tgl_message_entity_italic,
 tgl_message_entity_code,
 tgl_message_entity_pre,
-tgl_message_entity_text_url
+tgl_message_entity_text_url,
+tgl_message_entity_mention_name
 };
 
 struct tgl_message_entity {
@@ -221,7 +222,8 @@ enum tgl_message_media_type {
   tgl_message_media_webpage,
   tgl_message_media_venue,
   tgl_message_media_video,
-  tgl_message_media_audio
+  tgl_message_media_audio,
+  tgl_message_media_game
 };
 
 enum tgl_message_action_type {
@@ -250,7 +252,9 @@ enum tgl_message_action_type {
   tgl_message_action_accept_key,
   tgl_message_action_channel_create,
   tgl_message_action_migrated_to,
-  tgl_message_action_migrated_from
+  tgl_message_action_migrated_from,
+  tgl_message_action_pin,
+  tgl_message_action_game_score
 };
 
 enum tgl_typing_status {
@@ -309,7 +313,7 @@ struct tgl_encr_document {
   int size;
   int key_fingerprint;
   int flags;
-
+  
   unsigned char *key;
   unsigned char *iv;
   int w;
@@ -542,6 +546,8 @@ struct tgl_message_action {
       long long exchange_id;
       long long key_fingerprint;
     };
+    long long game_id;
+    int score;
   };
 };
 
@@ -574,7 +580,7 @@ struct tgl_message_media {
       };
       char *caption;
     };
-
+    
     struct tgl_encr_document *encr_document;
     struct tgl_webpage *webpage;
 
@@ -585,7 +591,7 @@ struct tgl_message_media {
       char *last_name;
       int user_id;
     };
-
+    
     struct {
       void *data;
       int data_size;

@@ -237,8 +237,9 @@ struct query *tglq_send_query_ex (struct tgl_state *TLS, struct tgl_dc *DC, int 
   if (!(DC->flags & 4) && !(flags & QUERY_FORCE_SEND)) {
     q->session_id = 0;
   }
+  int seq_no = q->seq_no;
   vlogprintf (E_DEBUG, "Msg_id is %" INT64_PRINTF_MODIFIER "d %p\n", q->msg_id, q);
-  vlogprintf (E_NOTICE, "Sent query #%" INT64_PRINTF_MODIFIER "d of size %d to DC %d\n", q->msg_id, 4 * ints, DC->id);
+  vlogprintf (E_DEBUG, "Sent query #%" INT64_PRINTF_MODIFIER "d of size %d to DC %d\n", q->msg_id, 4 * ints, DC->id);
   q->methods = methods;
   q->type = methods->type;
   q->DC = DC;
@@ -255,6 +256,7 @@ struct query *tglq_send_query_ex (struct tgl_state *TLS, struct tgl_dc *DC, int 
   q->callback = callback;
   q->callback_extra = callback_extra;
   TLS->active_queries ++;
+  vlogprintf (E_NOTICE, "<< Sent query magic 0x%08x size %d seq %i\n", ((int*)data)[0], 4 * ints, seq_no);
   return q;
 }
 
@@ -847,7 +849,8 @@ static int send_code_on_answer (struct tgl_state *TLS, struct query *q, void *D)
   struct tl_ds_auth_sent_code *DS_ASC = D;
 
   char *phone_code_hash = DS_STR_DUP (DS_ASC->phone_code_hash);
-  int registered = DS_BVAL (DS_ASC->phone_registered);;
+  //TODO: check int registered = DS_BVAL (DS_ASC->phone_registered);;
+  int registered = DS_ASC->phone_registered?1:0;
 
   if (q->callback) {
     ((void (*)(struct tgl_state *, void *, int, int, const char *))(q->callback)) (TLS, q->callback_extra, 1, registered, phone_code_hash);
@@ -869,11 +872,10 @@ void tgl_do_send_code (struct tgl_state *TLS, const char *phone, int phone_len, 
   clear_packet ();
   tgl_do_insert_header (TLS);
   out_int (CODE_auth_send_code);
-  out_cstring (phone, phone_len);
   out_int (0);
+  out_cstring (phone, phone_len);
   out_int (TLS->app_id);
   out_string (TLS->app_hash);
-  out_string ("en");
 
   tglq_send_query (TLS, TLS->DC_working, packet_ptr - packet_buffer, packet_buffer, &send_code_methods, NULL, callback, callback_extra);
 }
@@ -898,7 +900,7 @@ void tgl_do_phone_call (struct tgl_state *TLS, const char *phone, int phone_len,
 
   clear_packet ();
   tgl_do_insert_header (TLS);
-  out_int (CODE_auth_send_call);
+  //out_int (CODE_auth_send_call);
   out_cstring (phone, phone_len);
   out_cstring (hash, hash_len);
 
@@ -1580,9 +1582,11 @@ static void _tgl_do_get_history (struct tgl_state *TLS, struct get_history_extra
   if (tgl_get_peer_type (E->id) != TGL_PEER_CHANNEL || (C && (C->flags & TGLCHF_MEGAGROUP))) {
     out_int (CODE_messages_get_history);
     out_peer_id (TLS, E->id);
-  } else {    
-    out_int (CODE_channels_get_important_history);
-    
+    out_int (0); //offset_date
+  } else {
+    //TODO check: out_int (CODE_channels_get_important_history);
+    out_int (CODE_channels_get_messages);
+
     out_int (CODE_input_channel);
     out_int (tgl_get_peer_id (E->id));
     out_long (E->id.access_hash);
@@ -1745,9 +1749,10 @@ static struct query_methods get_dialogs_methods = {
 static void _tgl_do_get_dialog_list (struct tgl_state *TLS, struct get_dialogs_extra *E,  void (*callback)(struct tgl_state *TLS, void *callback_extra, int success, int size, tgl_peer_id_t peers[], tgl_message_id_t *last_msg_id[], int unread_count[]), void *callback_extra) {
   clear_packet ();
   if (E->channels) {
-    out_int (CODE_channels_get_dialogs);
-    out_int (E->offset);
-    out_int (E->limit - E->list_offset);
+    //TODO: check out_int (CODE_channels_get_dialogs);
+      out_int (CODE_channels_get_channels);
+    //out_int (E->offset);
+    //out_int (E->limit - E->list_offset);
   } else {
     out_int (CODE_messages_get_dialogs);
     out_int (E->offset_date);
@@ -1892,12 +1897,10 @@ static void send_avatar_end (struct tgl_state *TLS, struct send_file *f, void *c
   }
 
   if (f->avatar.peer_type != TGL_PEER_USER) {
-    out_int (CODE_input_photo_crop_auto);
     tglq_send_query (TLS, TLS->DC_working, packet_ptr - packet_buffer, packet_buffer, &send_msgs_methods, NULL, callback, callback_extra);
   } else {
     out_string ("profile photo");
     out_int (CODE_input_geo_point_empty);
-    out_int (CODE_input_photo_crop_auto);
     tglq_send_query (TLS, TLS->DC_working, packet_ptr - packet_buffer, packet_buffer, &set_photo_methods, 0, callback, callback_extra);
   }
 }
@@ -3357,15 +3360,15 @@ void tgl_do_load_document (struct tgl_state *TLS, struct tgl_document *V, void (
 void tgl_do_load_video (struct tgl_state *TLS, struct tgl_document *V, void (*callback)(struct tgl_state *TLS, void *callback_extra, int success, const char *filename), void *callback_extra) {
 
   struct download *D = talloc0 (sizeof (*D));
-  D->type = CODE_input_video_file_location;
-  
+  D->type = CODE_input_file_location;
+
   _tgl_do_load_document (TLS, V, D, callback, callback_extra);
 }
 
 void tgl_do_load_audio (struct tgl_state *TLS, struct tgl_document *V, void (*callback)(struct tgl_state *TLS, void *callback_extra, int success, const char *filename), void *callback_extra) {
-  
+
   struct download *D = talloc0 (sizeof (*D));
-  D->type = CODE_input_audio_file_location;
+  D->type = CODE_input_file_location;
 
   _tgl_do_load_document (TLS, V, D, callback, callback_extra);
 }
@@ -3704,6 +3707,8 @@ static int lookup_state_on_answer (struct tgl_state *TLS, struct query *q, void 
 static int get_difference_on_answer (struct tgl_state *TLS, struct query *q, void *D) {
   struct tl_ds_updates_difference *DS_UD = D;
 
+vlogprintf (E_DEBUG, "get_difference_on_answer");
+
   assert (TLS->locks & TGL_LOCK_DIFF);
   TLS->locks ^= TGL_LOCK_DIFF;
 
@@ -3833,6 +3838,7 @@ void tgl_do_get_difference (struct tgl_state *TLS, int sync_from_start, void (*c
     tglq_send_query (TLS, TLS->DC_working, packet_ptr - packet_buffer, packet_buffer, &get_difference_methods, 0, callback, callback_extra);
   } else {
     out_int (CODE_updates_get_state);
+    vlogprintf (E_DEBUG-2, "CODE_updates_get_state\n");
     tglq_send_query (TLS, TLS->DC_working, packet_ptr - packet_buffer, packet_buffer, &get_state_methods, 0, callback, callback_extra);
   }
 }
@@ -3850,7 +3856,8 @@ static int get_channel_difference_on_answer (struct tgl_state *TLS, struct query
   E->flags ^= TGLCHF_DIFF;
 
   if (DS_UD->magic == CODE_updates_channel_difference_empty) {
-    bl_do_set_channel_pts (TLS, tgl_get_peer_id (E->id), DS_LVAL (DS_UD->channel_pts));
+    //TODO: check bl_do_set_channel_pts (TLS, tgl_get_peer_id (E->id), DS_LVAL (DS_UD->channel_pts));
+    bl_do_set_channel_pts (TLS, tgl_get_peer_id (E->id), DS_LVAL (DS_UD->pts));
 
     vlogprintf (E_DEBUG, "Empty difference. Seq = %d\n", TLS->seq);
     if (q->callback) {
@@ -3886,7 +3893,8 @@ static int get_channel_difference_on_answer (struct tgl_state *TLS, struct query
 
     tfree (ML, ml_pos * sizeof (void *));
 
-    bl_do_set_channel_pts (TLS, tgl_get_peer_id (E->id), DS_LVAL (DS_UD->channel_pts));
+    //TODO: check bl_do_set_channel_pts (TLS, tgl_get_peer_id (E->id), DS_LVAL (DS_UD->channel_pts));
+    bl_do_set_channel_pts (TLS, tgl_get_peer_id (E->id), DS_LVAL (DS_UD->pts));
     if (DS_UD->magic != CODE_updates_channel_difference_too_long) {
       if (q->callback) {
         ((void (*)(struct tgl_state *, void *, int))q->callback) (TLS, q->callback_extra, 1);
@@ -4822,7 +4830,8 @@ void tgl_do_check_password (struct tgl_state *TLS, void (*callback)(struct tgl_s
 
 /* {{{ send broadcast */
 void tgl_do_send_broadcast (struct tgl_state *TLS, int num, tgl_peer_id_t peer_id[], const char *text, int text_len, unsigned long long flags, void (*callback)(struct tgl_state *TLS, void *extra, int success, int num, struct tgl_message *ML[]), void *callback_extra) {
-
+    vlogprintf (E_WARNING, "tgl_do_send_broadcast unsupported\n");
+    /*
   assert (num <= 1000);
 
   struct messages_send_extra *E = talloc0 (sizeof (*E));
@@ -4875,6 +4884,7 @@ void tgl_do_send_broadcast (struct tgl_state *TLS, int num, tgl_peer_id_t peer_i
   out_int (CODE_message_media_empty);
 
   tglq_send_query (TLS, TLS->DC_working, packet_ptr - packet_buffer, packet_buffer, &send_msgs_methods, E, callback, callback_extra);
+ */
 }
 /* }}} */
 
@@ -5356,14 +5366,16 @@ static int callback (struct tgl_state *TLS, struct query *q, void *D) {
 
 static int send_change_code_on_answer (struct tgl_state *TLS, struct query *q, void *D) {
 
-  struct tl_ds_account_sent_change_phone_code *DS_ASCPC= D;
-
+  //struct tl_ds_account_sent_change_phone_code *DS_ASCPC= D;
+  /*
+   * TODO: check
   char *phone_code_hash = DS_STR_DUP (DS_ASCPC->phone_code_hash);
 
   if (q->callback) {
     ((void (*)(struct tgl_state *, void *, int, const char *))(q->callback)) (TLS, q->callback_extra, 1, phone_code_hash);
   }
   tfree_str (phone_code_hash);
+  */
   return 0;
 }
 
@@ -5391,7 +5403,8 @@ static struct query_methods set_phone_methods  = {
 static struct query_methods send_change_code_methods  = {
   .on_answer = send_change_code_on_answer,
   .on_error = q_list_on_error,
-  .type = TYPE_TO_PARAM(account_sent_change_phone_code),
+  //TODO: check .type = TYPE_TO_PARAM(account_sent_change_phone_code),
+  //.type = TYPE_TO_PARAM(account_send_change_phone_code),
   .name = "send change phone code"
 };
 
