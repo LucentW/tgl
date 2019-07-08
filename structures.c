@@ -1122,7 +1122,7 @@ void tglf_fetch_message_action (struct tgl_state *TLS, struct tgl_message_action
     break;
   default:
     vlogprintf (E_ERROR, "Unknown magic 0x%08x\n", DS_MA->magic);
-    assert (0);
+    // assert (0);
   }
 }
 
