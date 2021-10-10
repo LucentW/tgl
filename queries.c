@@ -2091,7 +2091,7 @@ static void _tgl_do_send_photo (struct tgl_state *TLS, tgl_peer_id_t to_id, cons
       }
     } else {
       if (callback) {
-        ((void (*)(struct tgl_state *, void *, int))callback) (TLS, callback_extra, 0);
+        ((void (*)(struct tgl_state *, void *, int, struct tgl_message *))callback) (TLS, callback_extra, 0, NULL);
       }
     }
     return;
@@ -2108,7 +2108,7 @@ static void _tgl_do_send_photo (struct tgl_state *TLS, tgl_peer_id_t to_id, cons
       }
     } else {
       if (callback) {
-        ((void (*)(struct tgl_state *, void *, int))callback) (TLS, callback_extra, 0);
+        ((void (*)(struct tgl_state *, void *, int, struct tgl_message *))callback) (TLS, callback_extra, 0, NULL);
       }
     }
     return;
@@ -2141,7 +2141,7 @@ static void _tgl_do_send_photo (struct tgl_state *TLS, tgl_peer_id_t to_id, cons
       }
     } else {
       if (callback) {
-        ((void (*)(struct tgl_state *, void *, int))callback) (TLS, callback_extra, 0);
+        ((void (*)(struct tgl_state *, void *, int, struct tgl_message *))callback) (TLS, callback_extra, 0, NULL);
       }
     }
     return;
