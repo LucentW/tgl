@@ -23,6 +23,7 @@
 #ifndef TGL_AVOID_OPENSSL
 
 #include <openssl/sha.h>
+#include <openssl/evp.h>
 
 #include "sha.h"
 
@@ -31,6 +32,17 @@ void TGLC_sha1 (const unsigned char *d, size_t n, unsigned char *md) {
 }
 void TGLC_sha256 (const unsigned char *d, size_t n, unsigned char *md) {
   SHA256 (d, n, md);
+}
+void TGLC_sha256_two (const unsigned char *d1, size_t n1,
+                      const unsigned char *d2, size_t n2,
+                      unsigned char *md) {
+  EVP_MD_CTX *ctx = EVP_MD_CTX_new ();
+  EVP_DigestInit_ex (ctx, EVP_sha256 (), NULL);
+  EVP_DigestUpdate (ctx, d1, n1);
+  EVP_DigestUpdate (ctx, d2, n2);
+  unsigned int outlen = 32;
+  EVP_DigestFinal_ex (ctx, md, &outlen);
+  EVP_MD_CTX_free (ctx);
 }
 
 #endif

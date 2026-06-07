@@ -362,37 +362,28 @@ void tgl_init_aes_unauth (const char server_nonce[16], const char hidden_client_
 }
 
 void tgl_init_aes_auth (char auth_key[192], char msg_key[16], int encrypt) {
-  static unsigned char buffer[48], hash[20];
-  //  sha1_a = SHA1 (msg_key + substr (auth_key, 0, 32));
-  //  sha1_b = SHA1 (substr (auth_key, 32, 16) + msg_key + substr (auth_key, 48, 16));
-  //  sha1_с = SHA1 (substr (auth_key, 64, 32) + msg_key);
-  //  sha1_d = SHA1 (msg_key + substr (auth_key, 96, 32));
-  //  aes_key = substr (sha1_a, 0, 8) + substr (sha1_b, 8, 12) + substr (sha1_c, 4, 12);
-  //  aes_iv = substr (sha1_a, 8, 12) + substr (sha1_b, 0, 8) + substr (sha1_c, 16, 4) + substr (sha1_d, 0, 8);
-  memcpy (buffer, msg_key, 16);
-  memcpy (buffer + 16, auth_key, 32);
-  TGLC_sha1 (buffer, 48, hash);
-  memcpy (aes_key_raw, hash, 8);
-  memcpy (aes_iv, hash + 8, 12);
+  // MTProto 2.0 key derivation (x is baked in by callers via pointer offset):
+  //   x=0 for client→server: callers pass auth_key + 0
+  //   x=8 for server→client: callers pass auth_key + 8
+  //
+  //   sha256_a = SHA256(msg_key       || auth_key[ 0.. 36])
+  //   sha256_b = SHA256(auth_key[40.. 76] || msg_key      )
+  //   aes_key  = sha256_a[0..8]  || sha256_b[8..24] || sha256_a[24..32]
+  //   aes_iv   = sha256_b[0..8]  || sha256_a[8..24] || sha256_b[24..32]
+  unsigned char sha256_a[32], sha256_b[32];
+  TGLC_sha256_two ((const unsigned char *) msg_key,     16,
+                   (const unsigned char *) auth_key,    36, sha256_a);
+  TGLC_sha256_two ((const unsigned char *) auth_key + 40, 36,
+                   (const unsigned char *) msg_key,     16, sha256_b);
 
-  memcpy (buffer, auth_key + 32, 16);
-  memcpy (buffer + 16, msg_key, 16);
-  memcpy (buffer + 32, auth_key + 48, 16);
-  TGLC_sha1 (buffer, 48, hash);
-  memcpy (aes_key_raw + 8, hash + 8, 12);
-  memcpy (aes_iv + 12, hash, 8);
+  memcpy (aes_key_raw,      sha256_a,      8);
+  memcpy (aes_key_raw +  8, sha256_b +  8, 16);
+  memcpy (aes_key_raw + 24, sha256_a + 24,  8);
 
-  memcpy (buffer, auth_key + 64, 32);
-  memcpy (buffer + 32, msg_key, 16);
-  TGLC_sha1 (buffer, 48, hash);
-  memcpy (aes_key_raw + 20, hash + 4, 12);
-  memcpy (aes_iv + 20, hash + 16, 4);
+  memcpy (aes_iv,           sha256_b,      8);
+  memcpy (aes_iv +  8,      sha256_a +  8, 16);
+  memcpy (aes_iv + 24,      sha256_b + 24,  8);
 
-  memcpy (buffer, msg_key, 16);
-  memcpy (buffer + 16, auth_key + 96, 32);
-  TGLC_sha1 (buffer, 48, hash);
-  memcpy (aes_iv + 24, hash, 8);
-  
   if (encrypt) {
     TGLC_aes_set_encrypt_key (aes_key_raw, 32*8, &aes_key);
   } else {
@@ -417,4 +408,9 @@ int tgl_pad_aes_decrypt (char *from, int from_len, char *to, int size) {
   }
   TGLC_aes_ige_encrypt ((unsigned char *) from, (unsigned char *) to, from_len, &aes_key, aes_iv, 0);
   return from_len;
+}
+
+void tgl_do_aes_encrypt (char *buf, int len) {
+  assert (len > 0 && !(len & 15));
+  TGLC_aes_ige_encrypt ((unsigned char *) buf, (unsigned char *) buf, len, &aes_key, aes_iv, 1);
 }

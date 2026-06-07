@@ -375,6 +375,8 @@ void tgl_init_aes_unauth (const char server_nonce[16], const char hidden_client_
 void tgl_init_aes_auth (char auth_key[192], char msg_key[16], int encrypt);
 int tgl_pad_aes_encrypt (char *from, int from_len, char *to, int size);
 int tgl_pad_aes_decrypt (char *from, int from_len, char *to, int size);
+/* Encrypt buf[0..len) in-place using the AES key/IV set by tgl_init_aes_auth. */
+void tgl_do_aes_encrypt (char *buf, int len);
 /*
 static inline void hexdump_in (void) {
   hexdump (in_ptr, in_end);

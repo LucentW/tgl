@@ -715,17 +715,34 @@ static void init_enc_msg_inner_temp (struct tgl_dc *DC, long long msg_id) {
 
 
 static int aes_encrypt_message (struct tgl_state *TLS, char *key, struct encrypted_message *enc) {
-  unsigned char sha1_buffer[20];
+  unsigned char sha256_buffer[32];
   const int MINSZ = offsetof (struct encrypted_message, message);
   const int UNENCSZ = offsetof (struct encrypted_message, server_salt);
 
-  int enc_len = (MINSZ - UNENCSZ) + enc->msg_len;
+  int plain_len = (MINSZ - UNENCSZ) + enc->msg_len;
   assert (enc->msg_len >= 0 && enc->msg_len <= MAX_MESSAGE_INTS * 4 - 16 && !(enc->msg_len & 3));
-  TGLC_sha1 ((unsigned char *) &enc->server_salt, enc_len, sha1_buffer);
-  vlogprintf (E_DEBUG, "sending message with sha1 %08x\n", *(int *)sha1_buffer);
-  memcpy (enc->msg_key, sha1_buffer + 4, 16);
+
+  // MTProto 2.0: 12-1024 bytes random padding, total divisible by 16
+  unsigned int rnd;
+  assert (TGLC_rand_pseudo_bytes ((unsigned char *) &rnd, sizeof (rnd)) >= 0);
+  int pad_len = 12 + (int)(rnd % 1013);                          // 12..1024
+  pad_len += (16 - ((plain_len + pad_len) & 15)) & 15;           // align to 16
+  if (pad_len > 1024) { pad_len -= 16; }                         // cap (stays >= 12)
+  int padded_len = plain_len + pad_len;
+  assert (padded_len <= MAX_MESSAGE_INTS * 4 + (MINSZ - UNENCSZ));
+  assert (TGLC_rand_pseudo_bytes ((unsigned char *) &enc->server_salt + plain_len, pad_len) >= 0);
+
+  // msg_key = SHA256(auth_key[88..120] || padded_plaintext)[8..24]
+  // x=0 for client→server; key points to the full auth_key
+  TGLC_sha256_two ((const unsigned char *) key + 88, 32,
+                   (const unsigned char *) &enc->server_salt, padded_len,
+                   sha256_buffer);
+  vlogprintf (E_DEBUG, "sending message with sha256[8] %08x\n", *(int *)(sha256_buffer + 8));
+  memcpy (enc->msg_key, sha256_buffer + 8, 16);
+
   tgl_init_aes_auth (key, enc->msg_key, 1);
-  return tgl_pad_aes_encrypt ((char *) &enc->server_salt, enc_len, (char *) &enc->server_salt, MAX_MESSAGE_INTS * 4 + (MINSZ - UNENCSZ));
+  tgl_do_aes_encrypt ((char *) &enc->server_salt, padded_len);
+  return padded_len;
 }
 
 long long tglmp_encrypt_send_message (struct tgl_state *TLS, struct connection *c, int *msg, int msg_ints, int flags) {
@@ -1058,25 +1075,30 @@ static int process_rpc_message (struct tgl_state *TLS, struct connection *c, str
     DC->id, enc->auth_key_id, DC->auth_key_id, DC->temp_auth_key_id);
     return 0;
   }
+  // Track which auth_key was selected so we can verify msg_key afterwards
+  char *used_key;
   if (enc->auth_key_id == DC->temp_auth_key_id) {
     assert (enc->auth_key_id == DC->temp_auth_key_id);
     assert (DC->temp_auth_key_id);
-    tgl_init_aes_auth (DC->temp_auth_key + 8, enc->msg_key, 0);
+    used_key = DC->temp_auth_key;
+    tgl_init_aes_auth (used_key + 8, enc->msg_key, 0);  // x=8: server→client
   } else {
     assert (enc->auth_key_id == DC->auth_key_id);
     assert (DC->auth_key_id);
-    tgl_init_aes_auth (DC->auth_key + 8, enc->msg_key, 0);
+    used_key = DC->auth_key;
+    tgl_init_aes_auth (used_key + 8, enc->msg_key, 0);  // x=8: server→client
   }
 
   int l = tgl_pad_aes_decrypt ((char *)&enc->server_salt, len - UNENCSZ, (char *)&enc->server_salt, len - UNENCSZ);
   assert (l == len - UNENCSZ);
 
-  if (!(!(enc->msg_len & 3) && enc->msg_len > 0 && enc->msg_len <= len - MINSZ && len - MINSZ - enc->msg_len <= 12)) {
+  int padding = len - MINSZ - enc->msg_len;
+  if (!(!(enc->msg_len & 3) && enc->msg_len > 0 && enc->msg_len <= len - MINSZ && padding >= 12 && padding <= 1024)) {
     vlogprintf (E_WARNING, "Incorrect packet from server. Closing connection\n");
     fail_connection (TLS, c);
     return -1;
   }
-  assert (!(enc->msg_len & 3) && enc->msg_len > 0 && enc->msg_len <= len - MINSZ && len - MINSZ - enc->msg_len <= 12);
+  assert (!(enc->msg_len & 3) && enc->msg_len > 0 && enc->msg_len <= len - MINSZ && padding >= 12 && padding <= 1024);
 
   struct tgl_session *S = TLS->net_methods->get_session (c);
   if (!S || S->session_id != enc->session_id) {
@@ -1084,14 +1106,18 @@ static int process_rpc_message (struct tgl_state *TLS, struct connection *c, str
     return 0;
   }
 
-  static unsigned char sha1_buffer[20];
-  TGLC_sha1 ((void *)&enc->server_salt, enc->msg_len + (MINSZ - UNENCSZ), sha1_buffer);
-  if (memcmp (&enc->msg_key, sha1_buffer + 4, 16)) {
+  // MTProto 2.0: msg_key = SHA256(auth_key[96..128] || padded_plaintext)[8..24]
+  // x=8 for server→client: auth_key[88+8..88+8+32] = auth_key[96..128]
+  unsigned char sha256_buffer[32];
+  TGLC_sha256_two ((const unsigned char *) used_key + 96, 32,
+                   (const unsigned char *) &enc->server_salt, enc->msg_len + (MINSZ - UNENCSZ) + padding,
+                   sha256_buffer);
+  if (memcmp (&enc->msg_key, sha256_buffer + 8, 16)) {
     vlogprintf (E_WARNING, "Incorrect packet from server. Closing connection\n");
     fail_connection (TLS, c);
     return -1;
   }
-  assert (!memcmp (&enc->msg_key, sha1_buffer + 4, 16));
+  assert (!memcmp (&enc->msg_key, sha256_buffer + 8, 16));
 
   int this_server_time = enc->msg_id >> 32LL;
   if (!S->received_messages) {

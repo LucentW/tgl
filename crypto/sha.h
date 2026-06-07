@@ -25,5 +25,9 @@
 
 void TGLC_sha1 (const unsigned char *d, size_t n, unsigned char *md);
 void TGLC_sha256 (const unsigned char *d, size_t n, unsigned char *md);
+/* Hash two non-contiguous buffers in a single SHA256 pass. */
+void TGLC_sha256_two (const unsigned char *d1, size_t n1,
+                      const unsigned char *d2, size_t n2,
+                      unsigned char *md);
 
 #endif

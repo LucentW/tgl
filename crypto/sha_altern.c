@@ -37,5 +37,15 @@ void TGLC_sha1 (const unsigned char *d, size_t n, unsigned char *md) {
 void TGLC_sha256 (const unsigned char *d, size_t n, unsigned char *md) {
   gcry_md_hash_buffer (GCRY_MD_SHA256, md, d, n);
 }
+void TGLC_sha256_two (const unsigned char *d1, size_t n1,
+                      const unsigned char *d2, size_t n2,
+                      unsigned char *md) {
+  gcry_md_hd_t h;
+  gcry_md_open (&h, GCRY_MD_SHA256, 0);
+  gcry_md_write (h, d1, n1);
+  gcry_md_write (h, d2, n2);
+  memcpy (md, gcry_md_read (h, GCRY_MD_SHA256), 32);
+  gcry_md_close (h);
+}
 
 #endif
