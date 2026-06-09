@@ -48,6 +48,7 @@
 #include "crypto/aes.h"
 #include "crypto/sha.h"
 #include "crypto/md5.h"
+#include <openssl/evp.h>
 
 #include "no-preview.h"
 #include "tgl-binlog.h"
@@ -414,6 +415,7 @@ int tglq_query_error (struct tgl_state *TLS, long long id) {
       vlogprintf (E_DEBUG - 2, "error for query #%" INT64_PRINTF_MODIFIER "d: #%d %.*s (HANDLED)\n", id, error_code, error_len, error);
     } else {
       vlogprintf (E_WARNING, "error for query '%s' #%" INT64_PRINTF_MODIFIER "d: #%d %.*s\n", q->methods->name, id, error_code, error_len, error);
+      fprintf (stderr, "DEBUG query error: '%s' code=%d msg=%.*s\n", q->methods ? q->methods->name : "?", error_code, error_len, error);
       if (q->methods && q->methods->on_error) {
         res = q->methods->on_error (TLS, q, error_code, error_len, error);
       }
@@ -508,6 +510,7 @@ void tgl_do_insert_header (struct tgl_state *TLS) {
   out_int (CODE_invoke_with_layer);
   out_int (TGL_SCHEME_LAYER);
   out_int (CODE_init_connection);
+  out_int (0); /* flags: no proxy, no params */
   out_int (TLS->app_id);
 #ifndef WIN32
   if (allow_send_linux_version) {
@@ -519,14 +522,18 @@ void tgl_do_insert_header (struct tgl_state *TLS) {
     out_string (buf);
     tsnprintf (buf, sizeof (buf) - 1, "%s (TGL %s)", TLS->app_version, TGL_VERSION);
     out_string (buf);
-    out_string ("En");
+    out_string ("en");  /* system_lang_code */
+    out_string ("");    /* lang_pack */
+    out_string ("en");  /* lang_code */
   } else {
     out_string ("x86");
     out_string ("Linux");
     static char buf[4096];
     tsnprintf (buf, sizeof (buf) - 1, "%s (TGL %s)", TLS->app_version, TGL_VERSION);
     out_string (buf);
-    out_string ("en");
+    out_string ("en");  /* system_lang_code */
+    out_string ("");    /* lang_pack */
+    out_string ("en");  /* lang_code */
   }
 #else
     out_string ("x86");
@@ -534,7 +541,9 @@ void tgl_do_insert_header (struct tgl_state *TLS) {
     static char buf[4096];
     tsnprintf (buf, sizeof (buf) - 1, "%s (TGL %s)", TLS->app_version, TGL_VERSION);
     out_string (buf);
-    out_string ("en");
+    out_string ("en");  /* system_lang_code */
+    out_string ("");    /* lang_pack */
+    out_string ("en");  /* lang_code */
 #endif
 }
 
@@ -849,8 +858,9 @@ static int send_code_on_answer (struct tgl_state *TLS, struct query *q, void *D)
   struct tl_ds_auth_sent_code *DS_ASC = D;
 
   char *phone_code_hash = DS_STR_DUP (DS_ASC->phone_code_hash);
-  //TODO: check int registered = DS_BVAL (DS_ASC->phone_registered);;
-  int registered = DS_ASC->phone_registered?1:0;
+  /* Layer 225: phone_registered is gone; assume registered so we ask for code first.
+     If signIn returns authorizationSignUpRequired we handle signup then. */
+  int registered = 1;
 
   if (q->callback) {
     ((void (*)(struct tgl_state *, void *, int, int, const char *))(q->callback)) (TLS, q->callback_extra, 1, registered, phone_code_hash);
@@ -872,10 +882,11 @@ void tgl_do_send_code (struct tgl_state *TLS, const char *phone, int phone_len, 
   clear_packet ();
   tgl_do_insert_header (TLS);
   out_int (CODE_auth_send_code);
-  out_int (0);
   out_cstring (phone, phone_len);
   out_int (TLS->app_id);
   out_string (TLS->app_hash);
+  out_int (CODE_code_settings);
+  out_int (0); /* CodeSettings flags: no optional fields */
 
   tglq_send_query (TLS, TLS->DC_working, packet_ptr - packet_buffer, packet_buffer, &send_code_methods, NULL, callback, callback_extra);
 }
@@ -942,19 +953,21 @@ static struct query_methods sign_in_methods  = {
 int tgl_do_send_code_result (struct tgl_state *TLS, const char *phone, int phone_len, const char *hash, int hash_len, const char *code, int code_len, void (*callback)(struct tgl_state *TLS, void *callback_extra, int success, struct tgl_user *Self), void *callback_extra) {
   clear_packet ();
   out_int (CODE_auth_sign_in);
+  out_int (1); /* flags: bit 0 = phone_code present */
   out_cstring (phone, phone_len);
   out_cstring (hash, hash_len);
-  out_cstring (code, code_len);
+  out_cstring (code, code_len); /* phone_code:flags.0?string */
   tglq_send_query (TLS, TLS->DC_working, packet_ptr - packet_buffer, packet_buffer, &sign_in_methods, 0, callback, callback_extra);
   return 0;
 }
 
 int tgl_do_send_code_result_auth (struct tgl_state *TLS, const char *phone, int phone_len, const char *hash, int hash_len, const char *code, int code_len, const char *first_name, int first_name_len, const char *last_name, int last_name_len, void (*callback)(struct tgl_state *TLS, void *callback_extra, int success, struct tgl_user *Self), void *callback_extra) {
+  (void) code; (void) code_len; /* phone_code removed from signUp in Layer 225 */
   clear_packet ();
   out_int (CODE_auth_sign_up);
+  out_int (0); /* flags: no optional fields */
   out_cstring (phone, phone_len);
   out_cstring (hash, hash_len);
-  out_cstring (code, code_len);
   out_cstring (first_name, first_name_len);
   out_cstring (last_name, last_name_len);
   tglq_send_query (TLS, TLS->DC_working, packet_ptr - packet_buffer, packet_buffer, &sign_in_methods, 0, callback, callback_extra);
@@ -1073,6 +1086,8 @@ void tgl_do_send_msg (struct tgl_state *TLS, struct tgl_message *M, void (*callb
   out_int (f);
   out_peer_id (TLS, M->to_id);
   if (M->reply_id) {
+    out_int (CODE_input_reply_to_message);
+    out_int (0); /* flags: no top_msg_id, no quote */
     out_int (M->reply_id);
   }
   out_cstring (M->message, M->message_len);
@@ -1755,15 +1770,16 @@ static void _tgl_do_get_dialog_list (struct tgl_state *TLS, struct get_dialogs_e
     //out_int (E->limit - E->list_offset);
   } else {
     out_int (CODE_messages_get_dialogs);
+    out_int (0); /* flags: no exclude_pinned, no folder_id */
     out_int (E->offset_date);
     out_int (E->offset);
-    //out_int (0);
     if (E->offset_peer.peer_type) {
       out_peer_id (TLS, E->offset_peer);
     } else {
       out_int (CODE_input_peer_empty);
     }
     out_int (E->limit - E->list_offset);
+    out_long (0LL); /* hash */
   }
 
   tglq_send_query (TLS, TLS->DC_working, packet_ptr - packet_buffer, packet_buffer, &get_dialogs_methods, E, callback, callback_extra);
@@ -1796,16 +1812,16 @@ static void out_peer_id (struct tgl_state *TLS, tgl_peer_id_t id) {
   switch (tgl_get_peer_type (id)) {
   case TGL_PEER_CHAT:
     out_int (CODE_input_peer_chat);
-    out_int (tgl_get_peer_id (id));
+    out_long ((long long)tgl_get_peer_id (id));
     break;
   case TGL_PEER_USER:
     out_int (CODE_input_peer_user);
-    out_int (tgl_get_peer_id (id));
+    out_long ((long long)tgl_get_peer_id (id));
     out_long (id.access_hash);
     break;
   case TGL_PEER_CHANNEL:
     out_int (CODE_input_peer_channel);
-    out_int (tgl_get_peer_id (id));
+    out_long ((long long)tgl_get_peer_id (id));
     out_long (id.access_hash);
     break;
   default:
@@ -1913,32 +1929,40 @@ static void send_file_unencrypted_end (struct tgl_state *TLS, struct send_file *
   if (f->reply) {
     out_int (f->reply);
   }
+  char *s = f->file_name + strlen (f->file_name);
+  while (s >= f->file_name && *s != '/') { s --;}
+
   if (f->flags & TGL_SEND_MSG_FLAG_DOCUMENT_PHOTO) {
     out_int (CODE_input_media_uploaded_photo);
+    out_int (0); /* flags */
   } else {
-    if (f->thumb_id > 0) {
-      out_int (CODE_input_media_uploaded_thumb_document);
-    } else {
-      out_int (CODE_input_media_uploaded_document);
-    }
+    out_int (CODE_input_media_uploaded_document);
+    out_int (f->thumb_id > 0 ? 4 : 0); /* flags: bit 2 = thumb present */
   }
 
+  /* file:InputFile */
   if (f->size < (16 << 20)) {
     out_int (CODE_input_file);
   } else {
     out_int (CODE_input_file_big);
   }
-
   out_long (f->id);
   out_int (f->part_num);
-  char *s = f->file_name + strlen (f->file_name);
-  while (s >= f->file_name && *s != '/') { s --;}
   out_string (s + 1);
   if (f->size < (16 << 20)) {
     out_string ("");
   }
 
   if (!(f->flags & TGL_SEND_MSG_FLAG_DOCUMENT_PHOTO)) {
+    /* thumb:flags.2?InputFile */
+    if (f->thumb_id > 0) {
+      out_int (CODE_input_file);
+      out_long (f->thumb_id);
+      out_int (1);
+      out_string ("thumb.jpg");
+      out_string ("");
+    }
+
     out_string (tg_mime_by_filename (f->file_name));
 
     out_int (CODE_vector);
@@ -1958,15 +1982,15 @@ static void send_file_unencrypted_end (struct tgl_state *TLS, struct send_file *
     } else if (f->flags & TGLDF_AUDIO) {
       out_int (2);
       out_int (CODE_document_attribute_audio);
+      out_int (0); /* flags: not voice, no title/performer/waveform */
       out_int (f->duration);
-      out_string ("");
-      out_string ("");
       out_int (CODE_document_attribute_filename);
       out_string (s + 1);
     } else if (f->flags & TGLDF_VIDEO) {
       out_int (2);
       out_int (CODE_document_attribute_video);
-      out_int (f->duration);
+      out_int (0); /* flags: no round_message/supports_streaming/nosound */
+      out_double ((double)f->duration); /* duration:double */
       out_int (f->w);
       out_int (f->h);
       out_int (CODE_document_attribute_filename);
@@ -1979,19 +2003,9 @@ static void send_file_unencrypted_end (struct tgl_state *TLS, struct send_file *
       out_int (CODE_document_attribute_filename);
       out_string (s + 1);
     }
-
-    if (f->thumb_id > 0) {
-      out_int (CODE_input_file);
-      out_long (f->thumb_id);
-      out_int (1);
-      out_string ("thumb.jpg");
-      out_string ("");
-    }
-    
-    out_string (f->caption ? f->caption : "");
-  } else {
-    out_string (f->caption ? f->caption : "");
   }
+
+  out_string (f->caption ? f->caption : "");
 
 
   struct messages_send_extra *E = talloc0 (sizeof (*E));
@@ -2302,6 +2316,7 @@ static struct query_methods contact_search_methods = {
 void tgl_do_contact_search (struct tgl_state *TLS, const char *name, int name_len, void (*callback)(struct tgl_state *TLS, void *callback_extra, int success, tgl_peer_t *U), void *callback_extra) {
   clear_packet ();
   out_int (CODE_contacts_resolve_username);
+  out_int (0); /* flags: no referer */
   out_cstring (name, name_len);
 
   tglq_send_query (TLS, TLS->DC_working, packet_ptr - packet_buffer, packet_buffer, &contact_search_methods, 0, callback, callback_extra);
@@ -2496,13 +2511,18 @@ void tgl_do_forward_message (struct tgl_state *TLS, tgl_peer_id_t peer_id, tgl_m
   }
   
   clear_packet ();
-  out_int (CODE_messages_forward_message);
+  out_int (CODE_messages_forward_messages);
+  out_int (0); /* flags */
   tgl_peer_id_t from_peer = tgl_msg_id_to_peer_id (msg_id);
   out_peer_id (TLS, from_peer);
+  out_int (CODE_vector);
+  out_int (1);
   out_int (msg_id.id);
 
   struct messages_send_extra *E = talloc0 (sizeof (*E));
   E->id = tgl_peer_id_to_random_msg_id (peer_id);
+  out_int (CODE_vector);
+  out_int (1);
   out_long (E->id.id);
 
   out_peer_id (TLS, peer_id);
@@ -2523,12 +2543,18 @@ void tgl_do_send_contact (struct tgl_state *TLS, tgl_peer_id_t id, const char *p
   clear_packet ();
   out_int (CODE_messages_send_media);
   out_int (reply_id ? 1 : 0);
-  if (reply_id) { out_int (reply_id); }
   out_peer_id (TLS, id);
+  if (reply_id) {
+    out_int (CODE_input_reply_to_message);
+    out_int (0); /* flags */
+    out_int (reply_id);
+  }
   out_int (CODE_input_media_contact);
   out_cstring (phone, phone_len);
   out_cstring (first_name, first_name_len);
   out_cstring (last_name, last_name_len);
+  out_string (""); /* vcard:string */
+  out_string (""); /* message:string */
 
   struct messages_send_extra *E = talloc0 (sizeof (*E));
   tglt_secure_random (&E->id, 8);
@@ -2665,8 +2691,10 @@ void tgl_do_send_location (struct tgl_state *TLS, tgl_peer_id_t peer_id, double 
     out_peer_id (TLS, peer_id);
     out_int (CODE_input_media_geo_point);
     out_int (CODE_input_geo_point);
+    out_int (0); /* flags: no accuracy_radius */
     out_double (latitude);
     out_double (longitude);
+    out_string (""); /* message:string */
 
     struct messages_send_extra *E = talloc0 (sizeof (*E));
     E->id = tgl_peer_id_to_random_msg_id (peer_id);
@@ -2771,14 +2799,10 @@ static struct query_methods channels_set_about_methods = {
 };
 
 void tgl_do_channel_set_about (struct tgl_state *TLS, tgl_peer_id_t id, const char *about, int about_len, void (*callback)(struct tgl_state *TLS, void *callback_extra, int success), void *callback_extra) {
-  clear_packet ();
-  out_int (CODE_channels_edit_about);
-  assert (tgl_get_peer_type (id) == TGL_PEER_CHANNEL);
-  out_int (CODE_input_channel);
-  out_int (tgl_get_peer_id (id));
-  out_long (id.access_hash);
-  out_cstring (about, about_len);
-  tglq_send_query (TLS, TLS->DC_working, packet_ptr - packet_buffer, packet_buffer, &channels_set_about_methods, 0, callback, callback_extra);
+  /* channels.editAbout removed in Layer 74+; not available */
+  (void) id; (void) about; (void) about_len;
+  tgl_set_query_error (TLS, ENOSYS, "channels.editAbout not supported in Layer 225");
+  if (callback) { callback (TLS, callback_extra, 0); }
 }
 /* }}} */
 
@@ -2801,23 +2825,27 @@ void tgl_do_channel_set_admin (struct tgl_state *TLS, tgl_peer_id_t channel_id, 
   out_int (CODE_channels_edit_admin);
   assert (tgl_get_peer_type (channel_id) == TGL_PEER_CHANNEL);
   assert (tgl_get_peer_type (user_id) == TGL_PEER_USER);
+  out_int (0); /* flags: no rank */
   out_int (CODE_input_channel);
   out_int (tgl_get_peer_id (channel_id));
   out_long (channel_id.access_hash);
   out_int (CODE_input_user);
   out_int (tgl_get_peer_id (user_id));
   out_long (user_id.access_hash);
+  /* ChatAdminRights flags: post=1, edit=2, delete=3, ban=4, invite=5, pin=7, addadmins=9, manage=11 */
+  out_int (CODE_chat_admin_rights);
   switch (type) {
-  case 1:
-    out_int (CODE_channel_role_moderator);
+  case 1: /* moderator: delete+ban+invite */
+    out_int ((1 << 3) | (1 << 4) | (1 << 5));
     break;
-  case 2:
-    out_int (CODE_channel_role_editor);
+  case 2: /* editor: post+edit+delete+pin */
+    out_int ((1 << 1) | (1 << 2) | (1 << 3) | (1 << 7));
     break;
-  default:
-    out_int (CODE_channel_role_empty);
+  default: /* demote: no rights */
+    out_int (0);
     break;
   }
+  /* rank:flags.0?string absent since flags=0 */
   tglq_send_query (TLS, TLS->DC_working, packet_ptr - packet_buffer, packet_buffer, &send_msgs_methods, 0, callback, callback_extra);
 }
 /* }}} */
@@ -3022,7 +3050,7 @@ static int user_info_on_answer (struct tgl_state *TLS, struct query *q, void *D)
 static struct query_methods user_info_methods = {
   .on_answer = user_info_on_answer,
   .on_error = q_ptr_on_error,
-  .type = TYPE_TO_PARAM(user_full),
+  .type = TYPE_TO_PARAM(users_user_full),
   .name = "user info"
 };
 
@@ -3433,7 +3461,7 @@ static int export_auth_on_answer (struct tgl_state *TLS, struct query *q, void *
   clear_packet ();
   tgl_do_insert_header (TLS);
   out_int (CODE_auth_import_authorization);
-  out_int (tgl_get_peer_id (TLS->our_id));
+  out_long (DS_LVAL (DS_EA->id));
   out_cstring (DS_STR (DS_EA->bytes));
   tglq_send_query (TLS, q->extra, packet_ptr - packet_buffer, packet_buffer, &import_auth_methods, q->extra, q->callback, q->callback_extra);
   return 0;
@@ -3514,7 +3542,7 @@ static int del_contact_on_answer (struct tgl_state *TLS, struct query *q, void *
 static struct query_methods del_contact_methods = {
   .on_answer = del_contact_on_answer,
   .on_error = q_void_on_error,
-  .type = TYPE_TO_PARAM(contacts_link),
+  .type = TYPE_TO_PARAM(updates),
   .name = "del contact"
 };
 
@@ -3527,8 +3555,10 @@ void tgl_do_del_contact (struct tgl_state *TLS, tgl_peer_id_t id, void (*callbac
     return;
   }
   clear_packet ();
-  out_int (CODE_contacts_delete_contact);
+  out_int (CODE_contacts_delete_contacts);
 
+  out_int (CODE_vector);
+  out_int (1);
   out_int (CODE_input_user);
   out_int (tgl_get_peer_id (id));
   out_long (id.access_hash);
@@ -3832,6 +3862,7 @@ void tgl_do_get_difference (struct tgl_state *TLS, int sync_from_start, void (*c
     //if (TLS->qts == 0) { TLS->qts = 1; }
     if (TLS->date == 0) { TLS->date = 1; }
     out_int (CODE_updates_get_difference);
+    out_int (0);           /* flags: no pts_limit/pts_total_limit/qts_limit */
     out_int (TLS->pts);
     out_int (TLS->date);
     out_int (TLS->qts);
@@ -4012,16 +4043,19 @@ void tgl_do_channel_invite_user (struct tgl_state *TLS, tgl_peer_id_t channel_id
 
 void tgl_do_channel_kick_user (struct tgl_state *TLS, tgl_peer_id_t channel_id, tgl_peer_id_t id, void (*callback)(struct tgl_state *TLS, void *callback_extra, int success), void *callback_extra) {
   clear_packet ();
-  out_int (CODE_channels_kick_from_channel);
+  out_int (CODE_channels_edit_banned);
   out_int (CODE_input_channel);
   out_int (channel_id.peer_id);
   out_long (channel_id.access_hash);
 
-  out_int (CODE_input_user);
+  out_int (CODE_input_peer_user);
   out_int (tgl_get_peer_id (id));
   out_long (id.access_hash);
 
-  out_int (CODE_bool_true);
+  /* ChatBannedRights: all view/send/media bits banned, until_date=0 (forever) */
+  out_int (CODE_chat_banned_rights);
+  out_int (0x0001FFFF); /* all bits: view_messages+send_messages+send_media+... */
+  out_int (0);          /* until_date = 0 (permanent) */
   tglq_send_query (TLS, TLS->DC_working, packet_ptr - packet_buffer, packet_buffer, &send_msgs_methods, 0, callback, callback_extra);
 }
 
@@ -4204,9 +4238,9 @@ static struct query_methods export_card_methods = {
 };
 
 void tgl_do_export_card (struct tgl_state *TLS, void (*callback)(struct tgl_state *TLS, void *callback_extra, int success, int size, int *card), void *callback_extra) {
-  clear_packet ();
-  out_int (CODE_contacts_export_card);
-  tglq_send_query (TLS, TLS->DC_working, packet_ptr - packet_buffer, packet_buffer, &export_card_methods, 0, callback, callback_extra);
+  /* contacts.exportCard removed in later layers */
+  tgl_set_query_error (TLS, ENOSYS, "contacts.exportCard not supported in Layer 225");
+  if (callback) { callback (TLS, callback_extra, 0, 0, NULL); }
 }
 /* }}} */
 
@@ -4229,12 +4263,10 @@ static struct query_methods import_card_methods = {
 };
 
 void tgl_do_import_card (struct tgl_state *TLS, int size, int *card, void (*callback)(struct tgl_state *TLS, void *callback_extra, int success, struct tgl_user *U), void *callback_extra) {
-  clear_packet ();
-  out_int (CODE_contacts_import_card);
-  out_int (CODE_vector);
-  out_int (size);
-  out_ints (card, size);
-  tglq_send_query (TLS, TLS->DC_working, packet_ptr - packet_buffer, packet_buffer, &import_card_methods, 0, callback, callback_extra);
+  /* contacts.importCard removed in later layers */
+  (void) size; (void) card;
+  tgl_set_query_error (TLS, ENOSYS, "contacts.importCard not supported in Layer 225");
+  if (callback) { callback (TLS, callback_extra, 0, NULL); }
 }
 /* }}} */
 
@@ -4476,6 +4508,7 @@ void tgl_do_import_chat_link (struct tgl_state *TLS, const char *link, int len, 
     l --;
   }
   l ++;
+  if (*l == '+') { l++; } /* new-style t.me/+HASH — strip leading '+' */
 
   clear_packet ();
   out_int (CODE_messages_import_chat_invite);
@@ -4498,8 +4531,9 @@ void tgl_do_export_channel_link (struct tgl_state *TLS, tgl_peer_id_t id, void (
   }
 
   clear_packet ();
-  out_int (CODE_channels_export_invite);
-  out_int (CODE_input_channel);
+  out_int (CODE_messages_export_chat_invite);
+  out_int (0); /* flags: no optional fields */
+  out_int (CODE_input_peer_channel);
   out_int (tgl_get_peer_id (id));
   out_long (id.access_hash);
 
@@ -4667,14 +4701,7 @@ static int set_get_password_on_answer (struct tgl_state *TLS, struct query *q, v
 
   struct change_password_extra *E = talloc0 (sizeof (*E));
 
-  if (DS_AP->current_salt) {
-    E->current_salt_len = DS_AP->current_salt->len;
-    E->current_salt = tmemdup (DS_AP->current_salt->data, E->current_salt_len);
-  }
-  if (DS_AP->new_salt) {
-    E->new_salt_len = DS_AP->new_salt->len;
-    E->new_salt = tmemdup (DS_AP->new_salt->data, E->new_salt_len);
-  }
+  /* Layer 225: password uses SRP, no salt fields; use has_password flag */
 
   if (new_hint) {
     E->hint_len = strlen (new_hint);
@@ -4684,7 +4711,7 @@ static int set_get_password_on_answer (struct tgl_state *TLS, struct query *q, v
   E->callback = q->callback;
   E->callback_extra = q->callback_extra;
 
-  if (DS_AP->magic == CODE_account_no_password) {
+  if (!DS_AP->has_password) {
     TLS->callback.get_values (TLS, tgl_new_password, "new password: ", 2, tgl_on_new_pwd, E);
   } else {
     static char s[512];
@@ -4741,42 +4768,214 @@ static struct query_methods check_password_methods = {
 
 
 struct check_password_extra {
-  char *current_salt;
-  int current_salt_len;
+  long long srp_id;
+  char *salt1;   int salt1_len;
+  char *salt2;   int salt2_len;
+  int g;
+  char *p;       int p_len;
+  char *srp_B;   int srp_B_len;
   void (*callback)(struct tgl_state *, void *, int);
   void *callback_extra;
 };
 
+/* Pad src (src_len bytes) into dst[256], big-endian, zero-prefixed. */
+static void bn_pad256 (const unsigned char *src, int src_len, unsigned char *dst) {
+  assert (src_len <= 256);
+  memset (dst, 0, 256 - src_len);
+  memcpy (dst + 256 - src_len, src, src_len);
+}
+
+/* bn → 256-byte big-endian buffer */
+static void bn_to_256 (TGLC_bn *n, unsigned char *out256) {
+  unsigned char tmp[256];
+  int nb = TGLC_bn_num_bytes (n);
+  assert (nb <= 256);
+  TGLC_bn_bn2bin (n, tmp);
+  bn_pad256 (tmp, nb, out256);
+}
+
+static void srp_hexdump (const char *label, const unsigned char *buf, int len) {
+  fprintf (stderr, "SRP %s (%d bytes): ", label, len);
+  for (int i = 0; i < len; i++) fprintf (stderr, "%02x", buf[i]);
+  fprintf (stderr, "\n");
+}
+
 static void tgl_pwd_got (struct tgl_state *TLS, const char *pwd[], void *_T) {
   struct check_password_extra *E = _T;
+  const char *password = pwd[0] ? pwd[0] : "";
+  int pwd_len = (int)strlen (password);
+  fprintf (stderr, "SRP g=%d salt1_len=%d salt2_len=%d p_len=%d B_len=%d pwd_len=%d\n",
+           E->g, E->salt1_len, E->salt2_len, E->p_len, E->srp_B_len, pwd_len);
+  srp_hexdump ("salt1", (unsigned char *)E->salt1, E->salt1_len);
+  srp_hexdump ("salt2", (unsigned char *)E->salt2, E->salt2_len);
+  srp_hexdump ("p", (unsigned char *)E->p, E->p_len);
+  srp_hexdump ("B_raw", (unsigned char *)E->srp_B, E->srp_B_len);
 
-  clear_packet ();
-  static char s[512];
-  static unsigned char shab[32];
-
-  assert (E->current_salt_len <= 128);
-  assert (strlen (pwd[0]) <= 128);
-
-  out_int (CODE_auth_check_password);
-
-  if (pwd[0] && E->current_salt_len) {
-    int l = E->current_salt_len;
-    memcpy (s, E->current_salt, l);
-
-    int r = strlen (pwd[0]);
-    strcpy (s + l, pwd[0]);
-
-    memcpy (s + l + r, E->current_salt, l);
-
-    TGLC_sha256 ((void *)s, 2 * l + r, shab);
-    out_cstring ((void *)shab, 32);
-  } else {
-    out_string ("");
+  /* --- PH1 = SH(SH(password, salt1), salt2) per Telegram SRP spec ---
+   *   inner = SHA256(salt1 || password || salt1)
+   *   PH1   = SHA256(salt2 || inner || salt2)                         */
+  unsigned char inner_ph1[32];
+  {
+    int l = E->salt1_len;
+    unsigned char *buf = talloc (2 * l + pwd_len);
+    memcpy (buf, E->salt1, l);
+    memcpy (buf + l, password, pwd_len);
+    memcpy (buf + l + pwd_len, E->salt1, l);
+    TGLC_sha256 (buf, 2 * l + pwd_len, inner_ph1);
+    tfree (buf, 2 * l + pwd_len);
   }
+  srp_hexdump ("inner_ph1", inner_ph1, 32);
+  unsigned char ph1[32];
+  {
+    int l2 = E->salt2_len;
+    unsigned char *buf = talloc (2 * l2 + 32);
+    memcpy (buf, E->salt2, l2);
+    memcpy (buf + l2, inner_ph1, 32);
+    memcpy (buf + l2 + 32, E->salt2, l2);
+    TGLC_sha256 (buf, 2 * l2 + 32, ph1);
+    tfree (buf, 2 * l2 + 32);
+  }
+  srp_hexdump ("ph1", ph1, 32);
 
+  /* --- PH2 = SH(pbkdf2(sha512, PH1, salt1, 100000), salt2) ---
+   *   dk  = PBKDF2_HMAC_SHA512(PH1, salt1, 100000, 64)
+   *   PH2 = SHA256(salt2 || dk || salt2)                             */
+  unsigned char dk[64];
+  PKCS5_PBKDF2_HMAC ((char *)ph1, 32,
+                     (unsigned char *)E->salt1, E->salt1_len,
+                     100000, EVP_sha512 (), 64, dk);
+  srp_hexdump ("pbkdf2_dk", dk, 64);
+  unsigned char ph2[32];
+  {
+    int l2 = E->salt2_len;
+    unsigned char *buf = talloc (2 * l2 + 64);
+    memcpy (buf, E->salt2, l2);
+    memcpy (buf + l2, dk, 64);
+    memcpy (buf + l2 + 64, E->salt2, l2);
+    TGLC_sha256 (buf, 2 * l2 + 64, ph2);
+    tfree (buf, 2 * l2 + 64);
+  }
+  srp_hexdump ("ph2", ph2, 32);
+
+  TGLC_bn_ctx *ctx = TGLC_bn_ctx_new ();
+
+  /* Load p (256-byte modulus) and g */
+  TGLC_bn *p_bn  = TGLC_bn_bin2bn ((unsigned char *)E->p, E->p_len, TGLC_bn_new ());
+  TGLC_bn *g_bn  = TGLC_bn_new (); TGLC_bn_set_word (g_bn, (unsigned long)E->g);
+  TGLC_bn *x_bn  = TGLC_bn_bin2bn (ph2, 32, TGLC_bn_new ());
+  TGLC_bn *B_bn  = TGLC_bn_bin2bn ((unsigned char *)E->srp_B, E->srp_B_len, TGLC_bn_new ());
+
+  /* g padded to 256 bytes */
+  unsigned char g_256[256] = {0};
+  {
+    unsigned char tmp[64]; int nb = TGLC_bn_num_bytes (g_bn);
+    TGLC_bn_bn2bin (g_bn, tmp); bn_pad256 (tmp, nb, g_256);
+  }
+  unsigned char p_256[256]; bn_to_256 (p_bn, p_256);
+  srp_hexdump ("g_256", g_256, 256);
+  srp_hexdump ("p_256", p_256, 256);
+
+  /* k = SHA256(p_256 || g_256) — p first per Telegram SRP spec */
+  unsigned char k_hash[32];
+  TGLC_sha256_two (p_256, 256, g_256, 256, k_hash);
+  srp_hexdump ("k_hash", k_hash, 32);
+  TGLC_bn *k_bn = TGLC_bn_bin2bn (k_hash, 32, TGLC_bn_new ());
+
+  /* g_x = g^x mod p */
+  TGLC_bn *g_x = TGLC_bn_new ();
+  TGLC_bn_mod_exp (g_x, g_bn, x_bn, p_bn, ctx);
+
+  /* a = 256 random bytes */
+  unsigned char a_bytes[256];
+  TGLC_rand_bytes (a_bytes, 256);
+  srp_hexdump ("a_bytes", a_bytes, 256);
+  TGLC_bn *a_bn = TGLC_bn_bin2bn (a_bytes, 256, TGLC_bn_new ());
+
+  /* A = g^a mod p, padded to 256 */
+  TGLC_bn *A_bn = TGLC_bn_new ();
+  TGLC_bn_mod_exp (A_bn, g_bn, a_bn, p_bn, ctx);
+  unsigned char A_256[256]; bn_to_256 (A_bn, A_256);
+  unsigned char B_256[256]; bn_to_256 (B_bn, B_256);
+  srp_hexdump ("A_256", A_256, 256);
+  srp_hexdump ("B_256", B_256, 256);
+
+  /* u = SHA256(A || B) */
+  unsigned char u_hash[32];
+  TGLC_sha256_two (A_256, 256, B_256, 256, u_hash);
+  srp_hexdump ("u_hash", u_hash, 32);
+  TGLC_bn *u_bn = TGLC_bn_bin2bn (u_hash, 32, TGLC_bn_new ());
+
+  /* t = (B - k*g_x) mod p */
+  TGLC_bn *kg_x = TGLC_bn_new ();
+  TGLC_bn_mod_mul (kg_x, k_bn, g_x, p_bn, ctx);
+  TGLC_bn *t_bn = TGLC_bn_new ();
+  TGLC_bn_mod_sub (t_bn, B_bn, kg_x, p_bn, ctx);
+
+  /* exp = a + u*x */
+  TGLC_bn *ux = TGLC_bn_new ();
+  TGLC_bn_mul (ux, u_bn, x_bn, ctx);
+  TGLC_bn *exp_bn = TGLC_bn_new ();
+  TGLC_bn_add (exp_bn, a_bn, ux);
+
+  /* s = t^exp mod p */
+  TGLC_bn *s_bn = TGLC_bn_new ();
+  TGLC_bn_mod_exp (s_bn, t_bn, exp_bn, p_bn, ctx);
+  unsigned char s_256[256]; bn_to_256 (s_bn, s_256);
+  srp_hexdump ("s_256", s_256, 256);
+
+  /* K = SHA256(s) */
+  unsigned char K[32];
+  TGLC_sha256 (s_256, 256, K);
+  srp_hexdump ("K", K, 32);
+
+  /* M1 = SHA256( (SHA256(p) XOR SHA256(g_256)) || SHA256(salt1) || SHA256(salt2) || A || B || K ) */
+  unsigned char sha_p[32], sha_g[32], sha_s1[32], sha_s2[32];
+  TGLC_sha256 (p_256, 256, sha_p);
+  TGLC_sha256 (g_256, 256, sha_g);
+  TGLC_sha256 ((unsigned char *)E->salt1, E->salt1_len, sha_s1);
+  TGLC_sha256 ((unsigned char *)E->salt2, E->salt2_len, sha_s2);
+  unsigned char xor_pg[32];
+  for (int i = 0; i < 32; i++) xor_pg[i] = sha_p[i] ^ sha_g[i];
+
+  unsigned char M1_input[32 + 32 + 32 + 256 + 256 + 32];
+  unsigned char *mp = M1_input;
+  memcpy (mp, xor_pg, 32);  mp += 32;
+  memcpy (mp, sha_s1,  32); mp += 32;
+  memcpy (mp, sha_s2,  32); mp += 32;
+  memcpy (mp, A_256,  256); mp += 256;
+  memcpy (mp, B_256,  256); mp += 256;
+  memcpy (mp, K,       32); mp += 32;
+  unsigned char M1[32];
+  TGLC_sha256 (M1_input, (int)(mp - M1_input), M1);
+  srp_hexdump ("M1", M1, 32);
+
+  /* Free bignums */
+  TGLC_bn_free (p_bn); TGLC_bn_free (g_bn); TGLC_bn_free (x_bn);
+  TGLC_bn_free (B_bn); TGLC_bn_free (k_bn); TGLC_bn_free (g_x);
+  TGLC_bn_free (a_bn); TGLC_bn_free (A_bn); TGLC_bn_free (u_bn);
+  TGLC_bn_free (kg_x); TGLC_bn_free (t_bn); TGLC_bn_free (ux);
+  TGLC_bn_free (exp_bn); TGLC_bn_free (s_bn);
+  TGLC_bn_ctx_free (ctx);
+
+  /* Send auth.checkPassword with InputCheckPasswordSRP */
+  clear_packet ();
+  out_int (CODE_auth_check_password);
+  out_int (CODE_input_check_password_s_r_p);
+  out_long (E->srp_id);
+  out_cstring ((char *)A_256, 256);
+  out_cstring ((char *)M1, 32);
+
+  {
+    int plen = (int)(packet_ptr - packet_buffer);
+    fprintf (stderr, "SRP checkPassword packet (%d ints = %d bytes):\n", plen, plen * 4);
+    srp_hexdump ("packet", (unsigned char *)packet_buffer, plen * 4);
+  }
   tglq_send_query (TLS, TLS->DC_working, packet_ptr - packet_buffer, packet_buffer, &check_password_methods, 0, E->callback, E->callback_extra);
 
-  tfree (E->current_salt, E->current_salt_len);
+  tfree (E->salt1, E->salt1_len);
+  tfree (E->salt2, E->salt2_len);
+  tfree (E->p, E->p_len);
+  tfree (E->srp_B, E->srp_B_len);
   tfree (E, sizeof (*E));
 }
 
@@ -4792,23 +4991,42 @@ static int check_get_password_on_error (struct tgl_state *TLS, struct query *q, 
 static int check_get_password_on_answer (struct tgl_state *TLS, struct query *q, void *D) {
   struct tl_ds_account_password *DS_AP = D;
 
-  if (DS_AP->magic == CODE_account_no_password) {
+  if (!DS_AP->has_password) {
     TLS->locks ^= TGL_LOCK_PASSWORD;
     return 0;
   }
-  static char s[512];
-  snprintf (s, 511, "type password (hint %.*s): ", DS_RSTR (DS_AP->hint));
 
-  struct check_password_extra *E = talloc0 (sizeof (*E));
-
-  if (DS_AP->current_salt) {
-    E->current_salt_len = DS_AP->current_salt->len;
-    E->current_salt = tmemdup (DS_AP->current_salt->data, E->current_salt_len);
+  struct tl_ds_password_kdf_algo *algo = DS_AP->current_algo;
+  if (!algo || !algo->salt1 || !algo->salt2 || !algo->p || !algo->g) {
+    vlogprintf (E_ERROR, "account.Password missing SRP algo fields\n");
+    TLS->locks ^= TGL_LOCK_PASSWORD;
+    return 0;
   }
 
-  E->callback = q->callback;
+  struct check_password_extra *E = talloc0 (sizeof (*E));
+  E->srp_id   = DS_AP->srp_id ? *DS_AP->srp_id : 0;
+  E->salt1_len = algo->salt1->len;
+  E->salt1     = (char *)tmemdup (algo->salt1->data, algo->salt1->len);
+  E->salt2_len = algo->salt2->len;
+  E->salt2     = (char *)tmemdup (algo->salt2->data, algo->salt2->len);
+  E->g         = DS_AP->current_algo->g ? *DS_AP->current_algo->g : 0;
+  E->p_len     = algo->p->len;
+  E->p         = (char *)tmemdup (algo->p->data, algo->p->len);
+  E->srp_B_len = DS_AP->srp_B ? DS_AP->srp_B->len : 0;
+  E->srp_B     = DS_AP->srp_B ? (char *)tmemdup (DS_AP->srp_B->data, DS_AP->srp_B->len) : NULL;
+  /* Verify B is from the right place — dump here before DS_AP is freed */
+  if (DS_AP->srp_B) {
+    fprintf (stderr, "DS_AP->srp_B->len=%d\n", DS_AP->srp_B->len);
+    srp_hexdump ("DS_srp_B_full", (unsigned char *)DS_AP->srp_B->data, DS_AP->srp_B->len);
+    srp_hexdump ("E_srp_B_copy",  (unsigned char *)E->srp_B,           E->srp_B_len);
+    fprintf (stderr, "DS_AP->srp_id=%lld\n", DS_AP->srp_id ? *DS_AP->srp_id : 0LL);
+  }
+
+  E->callback      = q->callback;
   E->callback_extra = q->callback_extra;
 
+  static char s[512];
+  snprintf (s, 511, "type password (hint %.*s): ", DS_RSTR (DS_AP->hint));
   TLS->callback.get_values (TLS, tgl_cur_password, s, 1, tgl_pwd_got, E);
   return 0;
 }
@@ -4991,11 +5209,9 @@ static struct query_methods get_tos_methods = {
 };
 
 void tgl_do_get_terms_of_service (struct tgl_state *TLS, void (*callback)(struct tgl_state *TLS, void *callback_extra, int success, const char *ans), void *callback_extra) {
-  clear_packet ();
-
-  out_int (CODE_help_get_terms_of_service);
-  out_string ("");
-  tglq_send_query (TLS, TLS->DC_working, packet_ptr - packet_buffer, packet_buffer, &get_tos_methods, 0, callback, callback_extra);
+  /* help.getTermsOfService removed; use help.getTermsOfServiceUpdate instead */
+  tgl_set_query_error (TLS, ENOSYS, "help.getTermsOfService not supported in Layer 225");
+  if (callback) { callback (TLS, callback_extra, 0, NULL); }
 }
 /* }}} */
 

@@ -449,10 +449,10 @@ static void send_file_encrypted_end (struct tgl_state *TLS, struct send_file *f,
 void tgl_do_send_location_encr (struct tgl_state *TLS, tgl_peer_id_t peer_id, double latitude, double longitude, unsigned long long flags, void (*callback)(struct tgl_state *TLS, void *callback_extra, int success, struct tgl_message *M), void *callback_extra) {
   struct tl_ds_decrypted_message_media TDSM;
   TDSM.magic = CODE_decrypted_message_media_geo_point;
-  TDSM.latitude = talloc (sizeof (double));
-  *TDSM.latitude = latitude;
-  TDSM.longitude = talloc (sizeof (double));
-  *TDSM.longitude = longitude;
+  TDSM.lat = talloc (sizeof (double));
+  *TDSM.lat = latitude;
+  TDSM.field_long = talloc (sizeof (double));
+  *TDSM.field_long = longitude;
   
   int date = time (0);
 
@@ -463,8 +463,8 @@ void tgl_do_send_location_encr (struct tgl_state *TLS, tgl_peer_id_t peer_id, do
   struct tgl_message_id id = tgl_peer_id_to_random_msg_id (P->id);;
   bl_do_edit_message_encr (TLS, &id, &from_id, &peer_id, &date, NULL, 0, &TDSM, NULL, NULL, TGLMF_UNREAD | TGLMF_OUT | TGLMF_PENDING | TGLMF_CREATE | TGLMF_CREATED | TGLMF_ENCRYPTED);
 
-  tfree (TDSM.latitude, sizeof (double));
-  tfree (TDSM.longitude, sizeof (double));
+  tfree (TDSM.lat, sizeof (double));
+  tfree (TDSM.field_long, sizeof (double));
 
   struct tgl_message *M = tgl_message_get (TLS, &id);
 
