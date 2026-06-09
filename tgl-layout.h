@@ -117,12 +117,12 @@
 #define TGLDCF_AUTHORIZED 1
 #define TGLDCF_LOGGED_IN 8
 
-#define TGL_PERMANENT_ID_SIZE 24
+#define TGL_PERMANENT_ID_SIZE 28
 #pragma pack(push,4)
 
-typedef struct { 
-  int peer_type; 
-  int peer_id; 
+typedef struct {
+  int peer_type;
+  long long peer_id;
   long long access_hash;
 } tgl_peer_id_t;
 
@@ -616,7 +616,7 @@ struct tgl_message_reply_markup {
 
 typedef struct tgl_message_id {
   unsigned peer_type;
-  unsigned peer_id;
+  unsigned long long peer_id;
   long long id;
   long long access_hash;
 } tgl_message_id_t;

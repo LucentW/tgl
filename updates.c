@@ -84,8 +84,8 @@ int tgl_check_qts_diff (struct tgl_state *TLS, int qts, int qts_count) {
 
 int tgl_check_channel_pts_diff (struct tgl_state *TLS, tgl_peer_t *_E, int pts, int pts_count) {
   struct tgl_channel *E = &_E->channel;
-  vlogprintf (E_NOTICE, "channel %d: pts = %d, pts_count = %d, current_pts = %d\n", tgl_get_peer_id (E->id), pts, pts_count, E->pts);
-  vlogprintf (E_DEBUG - 1, "channel %d: pts = %d, pts_count = %d, current_pts = %d\n", tgl_get_peer_id (E->id), pts, pts_count, E->pts);
+  vlogprintf (E_NOTICE, "channel %lld: pts = %d, pts_count = %d, current_pts = %d\n", tgl_get_peer_id (E->id), pts, pts_count, E->pts);
+  vlogprintf (E_DEBUG - 1, "channel %lld: pts = %d, pts_count = %d, current_pts = %d\n", tgl_get_peer_id (E->id), pts, pts_count, E->pts);
   if (!E->pts) {
     return 1;
   }
@@ -140,48 +140,40 @@ void tglu_work_update (struct tgl_state *TLS, int check_only, struct tl_ds_updat
     return;
   }
 
-  if (DS_U->pts) {
-    assert (DS_U->pts_count);
-
+  if (DS_U->pts && DS_U->pts_count) {
     if (!check_only && tgl_check_pts_diff (TLS, DS_LVAL (DS_U->pts), DS_LVAL (DS_U->pts_count)) <= 0) {
       return;
     }
   }
-  
+
   if (DS_U->qts) {
     if (!check_only && tgl_check_qts_diff (TLS, DS_LVAL (DS_U->qts), 1) <= 0) {
       return;
     }
   }
 
-   if (DS_U->pts) {
-    assert (DS_U->pts_count);
+  if (DS_U->pts && DS_U->pts_count) {
     int channel_id;
     if (DS_U->channel_id) {
       channel_id = DS_LVAL (DS_U->channel_id);
-    } else if (DS_U->read_history_outbox_peer){
+    } else if (DS_U->magic == CODE_update_read_history_outbox) {
       vlogprintf (E_WARNING, "updateReadHistoryOutbox not supported yet\n");
       return;
     } else {
       vlogprintf (E_WARNING, "tglu_work_update with magic 0x%08x\n", DS_U->magic);
-      if(DS_U->magic == 0x9961fd5c) {
+      if (DS_U->magic == 0x9961fd5c) {
         vlogprintf (E_WARNING, "tglu_work_update skip updateReadHistoryInbox\n");
         return;
       }
-      
-      if(DS_U->magic == 0xe40370a3) {
+      if (DS_U->magic == 0xe40370a3) {
         vlogprintf (E_WARNING, "tglu_work_update skip updateEditMessage\n");
         return;
-      }      
-      // assert (DS_U->message);
-	  if (DS_U->message == NULL) return;
-      if (!DS_U->message->to_id) {
-        return;
       }
-      assert (DS_U->message->to_id);
-      assert (DS_U->message->to_id->magic == CODE_peer_channel);
-      channel_id = DS_LVAL (DS_U->message->to_id->channel_id);
-    }    
+      if (DS_U->message == NULL) return;
+      if (!DS_U->message->peer_id) return;
+      if (DS_U->message->peer_id->magic != CODE_peer_channel) return;
+      channel_id = DS_LVAL (DS_U->message->peer_id->channel_id);
+    }
 
     tgl_peer_t *E = tgl_peer_get (TLS, TGL_MK_CHANNEL (channel_id));
     if (!E) {
@@ -198,12 +190,9 @@ void tglu_work_update (struct tgl_state *TLS, int check_only, struct tl_ds_updat
   switch (DS_U->magic) {
   case CODE_update_new_message:
     {
-      //struct tgl_message *N = tgl_message_get (TLS, DS_LVAL (DS_U->id));
-      //int new = (!N || !(N->flags & TGLMF_CREATED));
       int new_msg = 0;
       struct tgl_message *M = tglf_fetch_alloc_message (TLS, DS_U->message, &new_msg);
-      assert (M);
-      if (new_msg) {
+      if (M && new_msg) {
         bl_do_msg_update (TLS, &M->permanent_id);
       }
       break;
@@ -299,23 +288,15 @@ void tglu_work_update (struct tgl_state *TLS, int check_only, struct tl_ds_updat
     break;
   case CODE_update_user_name:
     {
-      tgl_peer_id_t user_id = TGL_MK_USER (DS_LVAL (DS_U->user_id));
+      tgl_peer_id_t user_id = TGL_MK_USER ((int)DS_LVAL (DS_U->user_id));
       tgl_peer_t *UC = tgl_peer_get (TLS, user_id);
       if (UC && (UC->flags & TGLPF_CREATED)) {
-        bl_do_user (TLS, tgl_get_peer_id (user_id), NULL, DS_STR (DS_U->first_name), DS_STR (DS_U->last_name), NULL, 0, DS_STR (DS_U->username), NULL, NULL, NULL, NULL, NULL, TGL_FLAGS_UNCHANGED);
+        /* Layer 225: username replaced by usernames vector; skip username update for now */
+        bl_do_user (TLS, tgl_get_peer_id (user_id), NULL, DS_STR (DS_U->first_name), DS_STR (DS_U->last_name), NULL, 0, NULL, 0, NULL, NULL, NULL, NULL, NULL, TGL_FLAGS_UNCHANGED);
       }
     }
     break;
-  case CODE_update_user_photo:
-    {
-      tgl_peer_id_t user_id = TGL_MK_USER (DS_LVAL (DS_U->user_id));
-      tgl_peer_t *UC = tgl_peer_get (TLS, user_id);
-      
-      if (UC && (UC->flags & TGLUF_CREATED)) {
-        bl_do_user (TLS, tgl_get_peer_id (user_id), NULL, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, DS_U->photo, NULL, NULL, NULL, TGL_FLAGS_UNCHANGED);
-      }
-    }
-    break;
+  /* CODE_update_user_photo removed in Layer 225; photo updates come via updateUser */
   case CODE_update_delete_messages:
     {
     }
@@ -329,19 +310,7 @@ void tglu_work_update (struct tgl_state *TLS, int check_only, struct tl_ds_updat
       }
     }
     break;
-  case CODE_update_contact_registered:
-    {
-      tgl_peer_id_t user_id = TGL_MK_USER (DS_LVAL (DS_U->user_id));
-      tgl_peer_t *U = tgl_peer_get (TLS, user_id);
-      if (TLS->callback.user_registered && U) {
-        TLS->callback.user_registered (TLS, (void *)U);
-      }
-    }
-    break;
-  case CODE_update_contact_link:
-    {
-    }
-    break;
+  /* CODE_update_contact_registered and CODE_update_contact_link removed in Layer 225 */
   /*case CODE_update_activation:
     {
       tgl_peer_id_t user_id = TGL_MK_USER (DS_LVAL (DS_U->user_id));
@@ -442,18 +411,21 @@ void tglu_work_update (struct tgl_state *TLS, int check_only, struct tl_ds_updat
       }
     }
     break;
-  case CODE_update_user_blocked:
+  case CODE_update_peer_blocked:
     {
-      int blocked = DS_BVAL (DS_U->blocked);
-      tgl_peer_t *P = tgl_peer_get (TLS, TGL_MK_USER (DS_LVAL (DS_U->user_id)));
-      if (P && (P->flags & TGLPF_CREATED)) {
-        int flags = P->flags & 0xffff; 
-        if (blocked) {
-          flags |= TGLUF_BLOCKED;
-        } else {
-          flags &= ~TGLUF_BLOCKED;
+      /* Layer 225: updatePeerBlocked; peer_id:Peer, blocked:flags.0?true */
+      int blocked = !!DS_U->blocked;
+      if (DS_U->peer_id && DS_U->peer_id->magic == CODE_peer_user) {
+        tgl_peer_t *P = tgl_peer_get (TLS, TGL_MK_USER ((int)DS_LVAL (DS_U->peer_id->user_id)));
+        if (P && (P->flags & TGLPF_CREATED)) {
+          int flags = P->flags & 0xffff;
+          if (blocked) {
+            flags |= TGLUF_BLOCKED;
+          } else {
+            flags &= ~TGLUF_BLOCKED;
+          }
+          bl_do_user (TLS, tgl_get_peer_id (P->id), NULL, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, NULL, NULL, NULL, NULL, flags);
         }
-        bl_do_user (TLS, tgl_get_peer_id (P->id), NULL, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, NULL, NULL, NULL, NULL, flags);
       }
     }
     break;
@@ -550,8 +522,7 @@ void tglu_work_update (struct tgl_state *TLS, int check_only, struct tl_ds_updat
     break;
   case CODE_update_channel_message_views:
     break;
-  case CODE_update_chat_admins:
-    break;
+  /* CODE_update_chat_admins removed in Layer 225 */
   case CODE_update_chat_participant_admin:
     break;
   case CODE_update_new_sticker_set:
@@ -570,8 +541,8 @@ void tglu_work_update (struct tgl_state *TLS, int check_only, struct tl_ds_updat
   case CODE_update_draft_message:
     break;       
   default:
-    vlogprintf (E_ERROR, "Unknown magic in tglu_work_update 0x%08x\n", DS_U->magic);
-    assert (0);
+    vlogprintf (E_WARNING, "Unknown magic in tglu_work_update 0x%08x\n", DS_U->magic);
+    break;
   }
   
   if (check_only) { return; }
@@ -592,9 +563,9 @@ void tglu_work_update (struct tgl_state *TLS, int check_only, struct tl_ds_updat
       channel_id = DS_LVAL (DS_U->channel_id);
     } else {
       assert (DS_U->message);
-      assert (DS_U->message->to_id);
-      assert (DS_U->message->to_id->magic == CODE_peer_channel);
-      channel_id = DS_LVAL (DS_U->message->to_id->channel_id);
+      assert (DS_U->message->peer_id);
+      assert (DS_U->message->peer_id->magic == CODE_peer_channel);
+      channel_id = DS_LVAL (DS_U->message->peer_id->channel_id);
     }    
 
     bl_do_set_channel_pts (TLS, channel_id, DS_LVAL (DS_U->pts));
