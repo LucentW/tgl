@@ -40,6 +40,10 @@ int TGLC_bn_num_bits (const TGLC_bn *a);
 void TGLC_bn_sub (TGLC_bn *r, const TGLC_bn *a, const TGLC_bn *b);
 int TGLC_bn_div (TGLC_bn *dv, TGLC_bn *rem, const TGLC_bn *a, const TGLC_bn *d, TGLC_bn_ctx *ctx);
 int TGLC_bn_mod_exp (TGLC_bn *r, const TGLC_bn *a, const TGLC_bn *p, const TGLC_bn *m, TGLC_bn_ctx *ctx);
+int TGLC_bn_mod_mul (TGLC_bn *r, const TGLC_bn *a, const TGLC_bn *b, const TGLC_bn *m, TGLC_bn_ctx *ctx);
+int TGLC_bn_mod_sub (TGLC_bn *r, const TGLC_bn *a, const TGLC_bn *b, const TGLC_bn *m, TGLC_bn_ctx *ctx);
+int TGLC_bn_mul (TGLC_bn *r, const TGLC_bn *a, const TGLC_bn *b, TGLC_bn_ctx *ctx);
+int TGLC_bn_add (TGLC_bn *r, const TGLC_bn *a, const TGLC_bn *b);
 
 #define TGLC_bn_num_bytes(a) ((TGLC_bn_num_bits(a)+7)/8)
 #define TGLC_bn_mod(rem,m,d,ctx) TGLC_bn_div(NULL,(rem),(m),(d),(ctx))

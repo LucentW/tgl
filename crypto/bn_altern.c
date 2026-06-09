@@ -143,4 +143,27 @@ int TGLC_bn_mod_exp (TGLC_bn *r, const TGLC_bn *a, const TGLC_bn *p, const TGLC_
   return 1;
 }
 
+int TGLC_bn_mod_mul (TGLC_bn *r, const TGLC_bn *a, const TGLC_bn *b, const TGLC_bn *m, TGLC_bn_ctx *ctx) {
+  (void) ctx;
+  gcry_mpi_mulm (unwrap_bn (r), unwrap_bn (a), unwrap_bn (b), unwrap_bn (m));
+  return 1;
+}
+
+int TGLC_bn_mod_sub (TGLC_bn *r, const TGLC_bn *a, const TGLC_bn *b, const TGLC_bn *m, TGLC_bn_ctx *ctx) {
+  (void) ctx;
+  gcry_mpi_subm (unwrap_bn (r), unwrap_bn (a), unwrap_bn (b), unwrap_bn (m));
+  return 1;
+}
+
+int TGLC_bn_mul (TGLC_bn *r, const TGLC_bn *a, const TGLC_bn *b, TGLC_bn_ctx *ctx) {
+  (void) ctx;
+  gcry_mpi_mul (unwrap_bn (r), unwrap_bn (a), unwrap_bn (b));
+  return 1;
+}
+
+int TGLC_bn_add (TGLC_bn *r, const TGLC_bn *a, const TGLC_bn *b) {
+  gcry_mpi_add (unwrap_bn (r), unwrap_bn (a), unwrap_bn (b));
+  return 1;
+}
+
 #endif
