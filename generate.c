@@ -171,6 +171,24 @@ int tn, fn, cn;
 struct tl_type **tps;
 struct tl_combinator **fns;
 
+/* Escape C reserved words used as field names in TL schemas. */
+static const char *c_field_name (const char *id) {
+  static const char *keywords[] = {
+    "auto","break","case","char","const","continue","default","do","double",
+    "else","enum","extern","float","for","goto","if","inline","int","long",
+    "register","restrict","return","short","signed","sizeof","static","struct",
+    "switch","typedef","union","unsigned","void","volatile","while",NULL
+  };
+  for (int i = 0; keywords[i]; i++) {
+    if (!strcmp (id, keywords[i])) {
+      static char buf[64];
+      snprintf (buf, sizeof (buf), "field_%s", id);
+      return buf;
+    }
+  }
+  return id;
+}
+
 struct tl_tree *read_tree (int *var_num);
 struct tl_tree *read_nat_expr (int *var_num);
 struct tl_tree *read_type_expr (int *var_num);
@@ -792,8 +810,8 @@ int gen_field_fetch_ds (struct arg *arg, int *vars, int num, int empty) {
       assert (t == NAME_VAR_NUM);
       printf ("%sassert (in_remaining () >= 4);\n", offset);
       if (arg->id && strlen (arg->id)) {
-        printf ("%sresult->%s = talloc (4);", offset, arg->id);
-        printf ("%s*result->%s = prefetch_int ();", offset, arg->id);
+        printf ("%sresult->%s = talloc (4);", offset, c_field_name (arg->id));
+        printf ("%s*result->%s = prefetch_int ();", offset, c_field_name (arg->id));
       } else {
         printf ("%sresult->f%d = talloc (4);", offset, num - 1);
         printf ("%s*result->f%d = prefetch_int ();", offset, num - 1);
@@ -819,7 +837,7 @@ int gen_field_fetch_ds (struct arg *arg, int *vars, int num, int empty) {
         bare = ((struct tl_tree_type *)arg->type)->self.flags & FLAG_BARE;
       }
       if (arg->id && strlen (arg->id)) {
-        printf ("%sresult->%s = ", offset, arg->id);
+        printf ("%sresult->%s = ", offset, c_field_name (arg->id));
       } else {
         printf ("%sresult->f%d = ", offset, num - 1);
       }
@@ -840,7 +858,7 @@ int gen_field_fetch_ds (struct arg *arg, int *vars, int num, int empty) {
       assert (gen_create (((struct tl_tree_array *)arg->type)->args[0]->type, vars, 2 + o) >= 0);
       printf (";\n");
       if (arg->id && strlen (arg->id)) {
-        printf ("%sresult->%s = ", offset, arg->id);
+        printf ("%sresult->%s = ", offset, c_field_name (arg->id));
       } else {
         printf ("%sresult->f%d = ", offset, num - 1);
       }
@@ -849,7 +867,7 @@ int gen_field_fetch_ds (struct arg *arg, int *vars, int num, int empty) {
       printf ("%s  int i = 0;\n", offset);
       printf ("%s  while (i < multiplicity%d) {\n", offset, num);
       if (arg->id && strlen (arg->id)) {
-        printf ("%s    result->%s[i ++] =", offset, arg->id);
+        printf ("%s    result->%s[i ++] =", offset, c_field_name (arg->id));
       } else {
         printf ("%s    result->f%d[i ++] = ", offset, num - 1);
       }
@@ -883,12 +901,12 @@ int gen_field_free_ds (struct arg *arg, int *vars, int num, int empty) {
       assert (t == NAME_VAR_NUM);
       if (arg->id && strlen (arg->id)) {
         if (vars[arg->var_num] == 0) {
-          printf ("%sstruct paramed_type *var%d = INT2PTR (*D->%s);\n", offset, arg->var_num, arg->id);
+          printf ("%sstruct paramed_type *var%d = INT2PTR (*D->%s);\n", offset, arg->var_num, c_field_name (arg->id));
           vars[arg->var_num] = 2;
         } else if (vars[arg->var_num] == 2) {
-          printf ("%sassert (vars%d == INT2PTR (*D->%s));\n", offset, arg->var_num, arg->id);
+          printf ("%sassert (vars%d == INT2PTR (*D->%s));\n", offset, arg->var_num, c_field_name (arg->id));
         }
-        printf ("%stfree (D->%s, sizeof (*D->%s));\n", offset, arg->id, arg->id);
+        printf ("%stfree (D->%s, sizeof (*D->%s));\n", offset, c_field_name (arg->id), c_field_name (arg->id));
       } else {
         if (vars[arg->var_num] == 0) {
           printf ("%sstruct paramed_type *var%d = INT2PTR (*D->f%d);\n", offset, arg->var_num, num - 1);
@@ -907,7 +925,7 @@ int gen_field_free_ds (struct arg *arg, int *vars, int num, int empty) {
       printf (";\n");
       int any = (t == NODE_TYPE_VAR_TYPE) || ((struct tl_tree_type *)arg->type)->type->name == NAME_VECTOR;
       if (arg->id && strlen (arg->id)) {
-        printf ("%sfree_ds_type_%s (D->%s, field%d);\n", offset, any ? "any" : ((struct tl_tree_type *)arg->type)->type->print_id, arg->id, num);      
+        printf ("%sfree_ds_type_%s (D->%s, field%d);\n", offset, any ? "any" : ((struct tl_tree_type *)arg->type)->type->print_id, c_field_name (arg->id), num);      
       } else {
         printf ("%sfree_ds_type_%s (D->f%d, field%d);\n", offset, any ? "any" : ((struct tl_tree_type *)arg->type)->type->print_id, num - 1, num);      
       }
@@ -923,14 +941,14 @@ int gen_field_free_ds (struct arg *arg, int *vars, int num, int empty) {
       printf ("%s  int i = 0;\n", offset);
       printf ("%s  while (i < multiplicity%d) {\n", offset, num);
       if (arg->id && strlen (arg->id)) {
-        printf ("%s    free_ds_type_%s (D->%s[i ++], field%d);\n", offset, "any", arg->id, num);
+        printf ("%s    free_ds_type_%s (D->%s[i ++], field%d);\n", offset, "any", c_field_name (arg->id), num);
       } else {
         printf ("%s    free_ds_type_%s (D->f%d[i ++], field%d);\n", offset, "any", num - 1, num);
       }
       printf ("%s  }\n", offset);
       printf ("%s}\n", offset);
       if (arg->id && strlen (arg->id)) {
-        printf ("%stfree (D->%s, sizeof (void *) * multiplicity%d);\n", offset, arg->id, num);
+        printf ("%stfree (D->%s, sizeof (void *) * multiplicity%d);\n", offset, c_field_name (arg->id), num);
       } else {
         printf ("%stfree (D->f%d, sizeof (void *) * multiplicity%d);\n", offset, num - 1, num);
       }
@@ -961,10 +979,10 @@ int gen_field_store_ds (struct arg *arg, int *vars, int num, int empty) {
       assert (t == NAME_VAR_NUM);
       if (arg->id && strlen (arg->id)) {
         if (vars[arg->var_num] == 0) {
-          printf ("%sstruct paramed_type *var%d = INT2PTR (*D->%s);\n", offset, arg->var_num, arg->id);
+          printf ("%sstruct paramed_type *var%d = INT2PTR (*D->%s);\n", offset, arg->var_num, c_field_name (arg->id));
           vars[arg->var_num] = 2;
         } else if (vars[arg->var_num] == 2) {
-          printf ("%sassert (vars%d == INT2PTR (*D->%s));\n", offset, arg->var_num, arg->id);
+          printf ("%sassert (vars%d == INT2PTR (*D->%s));\n", offset, arg->var_num, c_field_name (arg->id));
         }
         printf ("%sout_int (PTR2INT (var%d));\n", offset, arg->var_num);
       } else {
@@ -990,7 +1008,7 @@ int gen_field_store_ds (struct arg *arg, int *vars, int num, int empty) {
       int any = (t == NODE_TYPE_VAR_TYPE);
       int vec = ((struct tl_tree_type *)arg->type)->type->name == NAME_VECTOR;
       if (arg->id && strlen (arg->id)) {
-        printf ("%sstore_ds_type_%s%s (%sD->%s, field%d);\n", offset, bare ? "bare_" : "", any ? "any" : ((struct tl_tree_type *)arg->type)->type->print_id, vec ? "(void *)" : "", arg->id, num);      
+        printf ("%sstore_ds_type_%s%s (%sD->%s, field%d);\n", offset, bare ? "bare_" : "", any ? "any" : ((struct tl_tree_type *)arg->type)->type->print_id, vec ? "(void *)" : "", c_field_name (arg->id), num);      
       } else {
         printf ("%sstore_ds_type_%s%s (%sD->f%d, field%d);\n", offset, bare ? "bare_" : "", any ? "any" : ((struct tl_tree_type *)arg->type)->type->print_id, vec ? "(void *)" : "", num - 1, num);      
       }
@@ -1006,7 +1024,7 @@ int gen_field_store_ds (struct arg *arg, int *vars, int num, int empty) {
       printf ("%s  int i = 0;\n", offset);
       printf ("%s  while (i < multiplicity%d) {\n", offset, num);
       if (arg->id && strlen (arg->id)) {
-        printf ("%s    store_ds_type_%s (D->%s[i ++], field%d);\n", offset, "any", arg->id, num);
+        printf ("%s    store_ds_type_%s (D->%s[i ++], field%d);\n", offset, "any", c_field_name (arg->id), num);
       } else {
         printf ("%s    store_ds_type_%s (D->f%d[i ++], field%d);\n", offset, "any", num - 1, num);
       }
@@ -1044,10 +1062,10 @@ int gen_field_print_ds (struct arg *arg, int *vars, int num, int empty) {
     } else {
       if (arg->id && strlen (arg->id)) {
         if (vars[arg->var_num] == 0) {
-          printf ("%sstruct paramed_type *var%d = INT2PTR (*DS->%s);\n", offset, arg->var_num, arg->id);
+          printf ("%sstruct paramed_type *var%d = INT2PTR (*DS->%s);\n", offset, arg->var_num, c_field_name (arg->id));
           vars[arg->var_num] = 2;
         } else if (vars[arg->var_num] == 2) {
-          printf ("%sassert (vars%d == INT2PTR (*DS->%s));\n", offset, arg->var_num, arg->id);
+          printf ("%sassert (vars%d == INT2PTR (*DS->%s));\n", offset, arg->var_num, c_field_name (arg->id));
         }
       } else {
         if (vars[arg->var_num] == 0) {
@@ -1072,7 +1090,7 @@ int gen_field_print_ds (struct arg *arg, int *vars, int num, int empty) {
       int any = (t == NODE_TYPE_VAR_TYPE);
       int vec = ((struct tl_tree_type *)arg->type)->type->name == NAME_VECTOR;
       if (arg->id && strlen (arg->id)) {
-        printf ("%sprint_ds_type_%s%s (%sDS->%s, field%d);\n", offset, bare ? "bare_" : "", any ? "any" : ((struct tl_tree_type *)arg->type)->type->print_id, vec ? "(void *)" : "", arg->id, num);      
+        printf ("%sprint_ds_type_%s%s (%sDS->%s, field%d);\n", offset, bare ? "bare_" : "", any ? "any" : ((struct tl_tree_type *)arg->type)->type->print_id, vec ? "(void *)" : "", c_field_name (arg->id), num);      
       } else {
         printf ("%sprint_ds_type_%s%s (%sDS->f%d, field%d);\n", offset, bare ? "bare_" : "", any ? "any" : ((struct tl_tree_type *)arg->type)->type->print_id, vec ? "(void *)" : "", num - 1, num);      
       }
@@ -1092,7 +1110,7 @@ int gen_field_print_ds (struct arg *arg, int *vars, int num, int empty) {
       printf ("%s  while (i < multiplicity%d) {\n", offset, num);
       printf ("%s    if (multiline_output >= 1) { print_offset (); }\n", offset);
       if (arg->id && strlen (arg->id)) {
-        printf ("%s    print_ds_type_%s (DS->%s[i ++], field%d);\n", offset, "any", arg->id, num);
+        printf ("%s    print_ds_type_%s (DS->%s[i ++], field%d);\n", offset, "any", c_field_name (arg->id), num);
       } else {
         printf ("%s    print_ds_type_%s (DS->f%d[i ++], field%d);\n", offset, "any", num - 1, num);
       }
@@ -2578,7 +2596,7 @@ void gen_types_header (void) {
           
           printf ("f%d;\n", k);
         } else {
-          printf ("%s;\n", c->args[k]->id);
+          printf ("%s;\n", c_field_name (c->args[k]->id));
         }
       }
     }

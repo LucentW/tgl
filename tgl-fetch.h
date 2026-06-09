@@ -23,7 +23,7 @@
 #include "auto/auto-types.h"
 
 struct tgl_user *tglf_fetch_alloc_user (struct tgl_state *TLS, struct tl_ds_user *DS_U);
-struct tgl_user *tglf_fetch_alloc_user_full (struct tgl_state *TLS, struct tl_ds_user_full *DS_U);
+struct tgl_user *tglf_fetch_alloc_user_full (struct tgl_state *TLS, struct tl_ds_users_user_full *DS_U);
 struct tgl_chat *tglf_fetch_alloc_chat (struct tgl_state *TLS, struct tl_ds_chat *DS_C);
 struct tgl_chat *tglf_fetch_alloc_chat_full (struct tgl_state *TLS, struct tl_ds_messages_chat_full *DS_MCF);
 struct tgl_channel *tglf_fetch_alloc_channel (struct tgl_state *TLS, struct tl_ds_chat *DS_C);
