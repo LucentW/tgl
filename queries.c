@@ -1109,7 +1109,7 @@ void tgl_do_send_msg (struct tgl_state *TLS, struct tgl_message *M, void (*callb
         int j;
         for (j = 0; j < M->reply_markup->row_start[i + 1] - M->reply_markup->row_start[i]; j++) {
           out_int (CODE_keyboard_button);
-          out_string (M->reply_markup->buttons[j + M->reply_markup->row_start[i]]);
+          out_string (M->reply_markup->buttons[j + M->reply_markup->row_start[i]].text);
         }
       }
     } else {
@@ -1225,7 +1225,7 @@ void tgl_do_send_message (struct tgl_state *TLS, tgl_peer_id_t peer_id, const ch
     }
 
       
-    bl_do_edit_message (TLS, &id, &from_id, &peer_id, NULL, NULL, &date, text, text_len, &TDSM, NULL, reply ? &reply : NULL, reply_markup, EN, TGLMF_UNREAD | TGLMF_OUT | TGLMF_PENDING | TGLMF_CREATE | TGLMF_CREATED | TGLMF_SESSION_OUTBOUND | disable_preview);
+    bl_do_edit_message (TLS, &id, &from_id, &peer_id, NULL, NULL, &date, text, text_len, &TDSM, NULL, reply ? &reply : NULL, NULL, reply_markup, EN, TGLMF_UNREAD | TGLMF_OUT | TGLMF_PENDING | TGLMF_CREATE | TGLMF_CREATED | TGLMF_SESSION_OUTBOUND | disable_preview);
     
     if (flags & TGLMF_HTML) {
       tfree_str (new_text);
@@ -1363,7 +1363,7 @@ static int mark_read_on_receive (struct tgl_state *TLS, struct query *q, void *D
   struct mark_read_extra *E = q->extra;
 
   if (tgl_get_peer_type (E->id) == TGL_PEER_USER) {
-    bl_do_user (TLS, tgl_get_peer_id (E->id), NULL, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, NULL, &E->max_id, NULL, NULL, TGL_FLAGS_UNCHANGED);
+    bl_do_user (TLS, tgl_get_peer_id (E->id), NULL, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, NULL, &E->max_id, NULL, NULL, NULL, 0, TGL_FLAGS_UNCHANGED);
   } else {
     assert (tgl_get_peer_type (E->id) == TGL_PEER_CHAT);
     bl_do_chat (TLS, tgl_get_peer_id (E->id), NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, &E->max_id, NULL, TGL_FLAGS_UNCHANGED);
@@ -5079,7 +5079,7 @@ void tgl_do_send_broadcast (struct tgl_state *TLS, int num, tgl_peer_id_t peer_i
     E->list[i] = id;
 
     tgl_peer_id_t from_id = TLS->our_id;
-    bl_do_edit_message (TLS, &id, &from_id, &peer_id[i], NULL, NULL, &date, text, text_len, &TDSM, NULL, NULL, NULL, NULL, TGLMF_UNREAD | TGLMF_OUT | TGLMF_PENDING | TGLMF_CREATE | TGLMF_CREATED | disable_preview);
+    bl_do_edit_message (TLS, &id, &from_id, &peer_id[i], NULL, NULL, &date, text, text_len, &TDSM, NULL, NULL, NULL, NULL, NULL, TGLMF_UNREAD | TGLMF_OUT | TGLMF_PENDING | TGLMF_CREATE | TGLMF_CREATED | disable_preview);
   }
 
   clear_packet ();

@@ -1155,23 +1155,33 @@ struct tgl_message *tglf_fetch_alloc_message_short (struct tgl_state *TLS, struc
   tgl_peer_id_t our_id = TLS->our_id;
   tgl_peer_id_t peer_id = P->id;
 
-  /*tgl_peer_id_t fwd_from_id;
-  if (DS_U->fwd_from_id) {
-    fwd_from_id = tglf_fetch_peer_id (TLS, DS_U->fwd_from_id);
-  } else {
-    fwd_from_id = TGL_MK_USER (0);
-  }*/
+  tgl_peer_id_t fwd_from_id;
+  int fwd_date_val;
+  int *fwd_date_ptr = NULL;
+  if (DS_U->fwd_from && DS_U->fwd_from->from_id) {
+    fwd_from_id = tglf_fetch_peer_id (TLS, DS_U->fwd_from->from_id);
+    fwd_date_val = DS_LVAL (DS_U->fwd_from->date);
+    fwd_date_ptr = &fwd_date_val;
+  }
 
-  bl_do_edit_message (TLS, &msg_id, 
+  tgl_peer_id_t reply_to_peer_id;
+  tgl_peer_id_t *reply_to_peer_id_ptr = NULL;
+  if (DS_U->reply_to && DS_U->reply_to->reply_to_peer_id) {
+    reply_to_peer_id = tglf_fetch_peer_id (TLS, DS_U->reply_to->reply_to_peer_id);
+    reply_to_peer_id_ptr = &reply_to_peer_id;
+  }
+
+  bl_do_edit_message (TLS, &msg_id,
     (f & 2) ? &our_id : &peer_id,
     (f & 2) ? &peer_id : &our_id,
-    NULL,//DS_U->fwd_from_id ? &fwd_from_id : NULL,
-    NULL,//DS_U->fwd_date,
+    (DS_U->fwd_from && DS_U->fwd_from->from_id) ? &fwd_from_id : NULL,
+    fwd_date_ptr,
     DS_U->date,
     DS_STR (DS_U->message),
     &A,
     NULL,
     DS_U->reply_to ? DS_U->reply_to->reply_to_msg_id : NULL,
+    reply_to_peer_id_ptr,
     NULL,
     (void *)DS_U->entities,
     flags
@@ -1227,25 +1237,36 @@ struct tgl_message *tglf_fetch_alloc_message_short_chat (struct tgl_state *TLS, 
 
   tgl_peer_id_t from_id = F->id;
   tgl_peer_id_t to_id = T->id;
-  /*tgl_peer_id_t fwd_from_id;
-  if (DS_U->fwd_from_id) {
-    fwd_from_id = tglf_fetch_peer_id (TLS, DS_U->fwd_from_id);
-  } else {
-    fwd_from_id = TGL_MK_USER (0);
-  }*/
+
+  tgl_peer_id_t fwd_from_id2;
+  int fwd_date_val2;
+  int *fwd_date_ptr2 = NULL;
+  if (DS_U->fwd_from && DS_U->fwd_from->from_id) {
+    fwd_from_id2 = tglf_fetch_peer_id (TLS, DS_U->fwd_from->from_id);
+    fwd_date_val2 = DS_LVAL (DS_U->fwd_from->date);
+    fwd_date_ptr2 = &fwd_date_val2;
+  }
+
+  tgl_peer_id_t reply_to_peer_id2;
+  tgl_peer_id_t *reply_to_peer_id_ptr2 = NULL;
+  if (DS_U->reply_to && DS_U->reply_to->reply_to_peer_id) {
+    reply_to_peer_id2 = tglf_fetch_peer_id (TLS, DS_U->reply_to->reply_to_peer_id);
+    reply_to_peer_id_ptr2 = &reply_to_peer_id2;
+  }
 
   bl_do_edit_message (TLS, &msg_id,
     &from_id,
     &to_id,
-    NULL, //DS_U->fwd_from_id ? &fwd_from_id : NULL,
-    NULL, //DS_U->fwd_date,
+    (DS_U->fwd_from && DS_U->fwd_from->from_id) ? &fwd_from_id2 : NULL,
+    fwd_date_ptr2,
     DS_U->date,
     DS_STR (DS_U->message),
     &A,
     NULL,
     DS_U->reply_to ? DS_U->reply_to->reply_to_msg_id : NULL,
+    reply_to_peer_id_ptr2,
     NULL,
-    NULL,
+    (void *)DS_U->entities,
     flags
   );
   return M;
@@ -1544,19 +1565,6 @@ struct tgl_message *tglf_fetch_alloc_message (struct tgl_state *TLS, struct tl_d
       P = F;
     }
   }
-/*  
-  tgl_peer_t *FF = NULL;
-
-  if (DS_M->fwd_from_id) {
-    tgl_peer_id_t FF_id = tglf_fetch_peer_id (TLS, DS_M->fwd_from_id); 
-    FF = tgl_peer_get (TLS, FF_id);    
-    if (!FF) {
-      tgl_do_get_difference (TLS, 0, 0, 0);
-      vlogprintf (E_NOTICE, "unknown fwd_id\n");
-      return NULL;
-    }
-  }
-*/
   tgl_message_id_t msg_id = tgl_peer_id_to_msg_id (P->id, DS_LVAL (DS_M->id));
   struct tgl_message *M = tgl_message_get (TLS, &msg_id);
 
@@ -1594,28 +1602,33 @@ struct tgl_message *tglf_fetch_alloc_message (struct tgl_state *TLS, struct tl_d
   
     tgl_peer_id_t to_id = T->id;
 
-    
-    /*
     tgl_peer_id_t fwd_from_id;
-    if (DS_M->fwd_from_id) {
-      fwd_from_id = FF->id;
-    } else {
-      fwd_from_id = TGL_MK_USER (0);
+    int fwd_date_val3;
+    int *fwd_date_ptr3 = NULL;
+    if (DS_M->fwd_from && DS_M->fwd_from->from_id) {
+      fwd_from_id = tglf_fetch_peer_id (TLS, DS_M->fwd_from->from_id);
+      fwd_date_val3 = DS_LVAL (DS_M->fwd_from->date);
+      fwd_date_ptr3 = &fwd_date_val3;
     }
-    */
-    
+
+    tgl_peer_id_t reply_to_peer_id3;
+    tgl_peer_id_t *reply_to_peer_id_ptr3 = NULL;
+    if (DS_M->reply_to && DS_M->reply_to->reply_to_peer_id) {
+      reply_to_peer_id3 = tglf_fetch_peer_id (TLS, DS_M->reply_to->reply_to_peer_id);
+      reply_to_peer_id_ptr3 = &reply_to_peer_id3;
+    }
+
     bl_do_edit_message (TLS, &msg_id,
       DS_M->from_id ? &from_id : NULL,
       &to_id,
-//      DS_M->fwd_from_id ? &fwd_from_id : NULL,
-        NULL,
-//      DS_M->fwd_date,
-        0,
+      (DS_M->fwd_from && DS_M->fwd_from->from_id) ? &fwd_from_id : NULL,
+      fwd_date_ptr3,
       DS_M->date,
       DS_STR (DS_M->message),
       DS_M->media,
       DS_M->action,
       DS_M->reply_to ? DS_M->reply_to->reply_to_msg_id : NULL,
+      reply_to_peer_id_ptr3,
       DS_M->reply_markup,
       (void *)DS_M->entities,
       flags | TGLMF_CREATE | TGLMF_CREATED
@@ -1959,14 +1972,31 @@ struct tgl_message_reply_markup *tglf_fetch_alloc_reply_markup (struct tgl_state
     total += DS_LVAL (DS_K->buttons->cnt);
     R->row_start[i + 1] = total;
   }
-  R->buttons = talloc (sizeof (void *) * total);
+  R->buttons = talloc0 (sizeof (struct tgl_keyboard_button) * total);
   int r = 0;
   for (i = 0; i < R->rows; i++) {
     struct tl_ds_keyboard_button_row *DS_K = DS_RM->rows->data[i];
     int j;
     for (j = 0; j < DS_LVAL (DS_K->buttons->cnt); j++) {
       struct tl_ds_keyboard_button *DS_KB = DS_K->buttons->data[j];
-      R->buttons[r ++] = DS_STR_DUP (DS_KB->text);
+      struct tgl_keyboard_button *B = &R->buttons[r++];
+      B->text = DS_STR_DUP (DS_KB->text);
+      switch (DS_KB->magic) {
+      case CODE_keyboard_button_url:
+        B->type = TGL_KB_BUTTON_URL;
+        B->url = DS_STR_DUP (DS_KB->url);
+        break;
+      case CODE_keyboard_button_callback:
+        B->type = TGL_KB_BUTTON_CALLBACK;
+        if (DS_KB->data) {
+          B->data_len = DS_KB->data->len;
+          B->data = memdup (DS_KB->data->data, DS_KB->data->len);
+        }
+        break;
+      default:
+        B->type = TGL_KB_BUTTON_TEXT;
+        break;
+      }
     }
   }
   assert (r == total);
@@ -2194,13 +2224,17 @@ void tgls_clear_message (struct tgl_state *TLS, struct tgl_message *M) {
   tfree (M->entities, M->entities_num * sizeof (struct tgl_message_entity));
 }
 
-void tgls_free_reply_markup (struct tgl_state *TLS, struct tgl_message_reply_markup *R) { 
+void tgls_free_reply_markup (struct tgl_state *TLS, struct tgl_message_reply_markup *R) {
   if (!--R->refcnt) {
     int i;
-    for (i = 0; i < R->row_start[R->rows]; i++) {
-      tfree_str (R->buttons[i]);
+    int total = R->row_start[R->rows];
+    for (i = 0; i < total; i++) {
+      struct tgl_keyboard_button *B = &R->buttons[i];
+      if (B->text) { tfree_str (B->text); }
+      if (B->url)  { tfree_str (B->url); }
+      if (B->data) { tfree (B->data, B->data_len); }
     }
-    tfree (R->buttons, R->row_start[R->rows] * sizeof (void *));
+    tfree (R->buttons, total * sizeof (struct tgl_keyboard_button));
     tfree (R->row_start, 4 * (R->rows + 1));
     tfree (R, sizeof (*R));
   } else {

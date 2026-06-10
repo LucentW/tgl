@@ -607,12 +607,24 @@ struct tgl_message_media {
   };
 };
 
+#define TGL_KB_BUTTON_TEXT     0
+#define TGL_KB_BUTTON_URL      1
+#define TGL_KB_BUTTON_CALLBACK 2
+
+struct tgl_keyboard_button {
+  char *text;
+  char *url;
+  char *data;
+  int data_len;
+  int type;
+};
+
 struct tgl_message_reply_markup {
   int refcnt;
   int flags;
   int rows;
   int *row_start;
-  char **buttons;
+  struct tgl_keyboard_button *buttons;
 };
 
 typedef struct tgl_message_id {
@@ -633,6 +645,7 @@ struct tgl_message {
   tgl_peer_id_t fwd_from_id;
   int fwd_date;
   int reply_id;
+  tgl_peer_id_t reply_to_peer_id;
   tgl_peer_id_t from_id;
   tgl_peer_id_t to_id;
   int date;

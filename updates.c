@@ -739,7 +739,7 @@ void tglu_work_update_short_sent_message (struct tgl_state *TLS, int check_only,
     flags |= TGLMF_MENTION;
   }
 
-  bl_do_edit_message (TLS, &M->permanent_id, 
+  bl_do_edit_message (TLS, &M->permanent_id,
     NULL,
     NULL,
     NULL,
@@ -749,7 +749,8 @@ void tglu_work_update_short_sent_message (struct tgl_state *TLS, int check_only,
     DS_U->media,
     NULL,
     NULL,
-    NULL, 
+    NULL,
+    NULL,
     NULL,
     flags);
  
