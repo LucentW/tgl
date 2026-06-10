@@ -1918,7 +1918,7 @@ struct tgl_bot_info *tglf_fetch_alloc_bot_info (struct tgl_state *TLS, struct tl
   //TODO: check
     //if (!DS_BI || DS_BI->magic == CODE_bot_info_empty) { return NULL; }
     if (!DS_BI) { return NULL; }
-  struct tgl_bot_info *B = talloc (sizeof (*B));
+  struct tgl_bot_info *B = talloc0 (sizeof (*B));
   //B->version = DS_LVAL (DS_BI->version);
   //B->share_text = DS_STR_DUP (DS_BI->share_text);
   B->description = DS_STR_DUP (DS_BI->description);
