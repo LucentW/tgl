@@ -2880,7 +2880,11 @@ static int channels_get_members_on_answer (struct tgl_state *TLS, struct query *
     tglf_fetch_alloc_user (TLS, DS_CP->users->data[i]);
   }
   for (i = 0; i < count; i++) {
-    E->UL[E->count ++] = (void *)tgl_peer_get (TLS, TGL_MK_USER (DS_LVAL (DS_CP->participants->data[i]->user_id)));
+    if (!DS_CP->participants->data[i]->user_id) { continue; }
+    tgl_peer_t *U = tgl_peer_get (TLS, TGL_MK_USER (DS_LVAL (DS_CP->participants->data[i]->user_id)));
+    if (U) {
+      E->UL[E->count++] = (void *)U;
+    }
   }
   E->offset += count;
   
