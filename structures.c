@@ -338,16 +338,17 @@ struct tgl_user *tglf_fetch_alloc_user (struct tgl_state *TLS, struct tl_ds_user
     flags |= TGLUF_CREATE | TGLUF_CREATED;
   }
 
-  bl_do_user (TLS, tgl_get_peer_id (U->id), 
+  bl_do_user (TLS, tgl_get_peer_id (U->id),
     DS_U->access_hash,
-    DS_STR (DS_U->first_name), 
-    DS_STR (DS_U->last_name), 
+    DS_STR (DS_U->first_name),
+    DS_STR (DS_U->last_name),
     DS_STR (DS_U->phone),
     DS_STR (DS_U->username),
     NULL,
     DS_U->photo,
     NULL, NULL,
     NULL,
+    NULL, 0,
     flags
   );
   
@@ -395,6 +396,7 @@ struct tgl_user *tglf_fetch_alloc_user_full (struct tgl_state *TLS, struct tl_ds
     NULL,
     NULL, NULL,
     DS_UF->bot_info,
+    DS_STR (DS_UF->about),
     flags
   );
 
@@ -630,9 +632,9 @@ struct tgl_chat *tglf_fetch_alloc_chat_full (struct tgl_state *TLS, struct tl_ds
 
       tgl_peer_t *P = tgl_peer_get (TLS, TGL_MK_USER (DS_LVAL (DS_BI->user_id)));
       if (P && (P->flags & TGLCF_CREATED)) {
-        bl_do_user (TLS, tgl_get_peer_id (P->id), 
+        bl_do_user (TLS, tgl_get_peer_id (P->id),
             NULL,
-            NULL, 0, 
+            NULL, 0,
             NULL, 0,
             NULL, 0,
             NULL, 0,
@@ -640,6 +642,7 @@ struct tgl_chat *tglf_fetch_alloc_chat_full (struct tgl_state *TLS, struct tl_ds
             NULL,
             NULL, NULL,
             DS_BI,
+            NULL, 0,
             TGL_FLAGS_UNCHANGED
             );
       }

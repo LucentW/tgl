@@ -556,7 +556,7 @@ void bl_do_encr_chat_exchange (struct tgl_state *TLS, tgl_peer_id_t id, long lon
 }
 /* }}} */
 
-void bl_do_user (struct tgl_state *TLS, long long id, long long *access_hash, const char *first_name, int first_name_len, const char *last_name, int last_name_len, const char *phone, int phone_len, const char *username, int username_len, struct tl_ds_photo *photo, struct tl_ds_user_profile_photo *profile_photo, int *last_read_in, int *last_read_out, struct tl_ds_bot_info *bot_info, int flags) /* {{{ */ {
+void bl_do_user (struct tgl_state *TLS, long long id, long long *access_hash, const char *first_name, int first_name_len, const char *last_name, int last_name_len, const char *phone, int phone_len, const char *username, int username_len, struct tl_ds_photo *photo, struct tl_ds_user_profile_photo *profile_photo, int *last_read_in, int *last_read_out, struct tl_ds_bot_info *bot_info, const char *about, int about_len, int flags) /* {{{ */ {
   tgl_peer_t *_U = tgl_peer_get (TLS, TGL_MK_USER (id));
 
   unsigned updates = 0;
@@ -664,6 +664,11 @@ void bl_do_user (struct tgl_state *TLS, long long id, long long *access_hash, co
       }
       U->bot_info = tglf_fetch_alloc_bot_info (TLS, bot_info);
     }
+  }
+
+  if (about && (!U->about || mystreq1 (U->about, about, about_len))) {
+    if (U->about) { tfree_str (U->about); }
+    U->about = tstrndup (about, about_len);
   }
 
   if (TLS->callback.user_update && updates) {

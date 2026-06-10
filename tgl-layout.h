@@ -367,6 +367,7 @@ struct tgl_user {
   char *real_last_name;
   int bot;
   struct tgl_bot_info *bot_info;
+  char *about;
 };
 
 struct tgl_channel {
