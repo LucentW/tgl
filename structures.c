@@ -1923,13 +1923,17 @@ struct tgl_bot_info *tglf_fetch_alloc_bot_info (struct tgl_state *TLS, struct tl
   //B->share_text = DS_STR_DUP (DS_BI->share_text);
   B->description = DS_STR_DUP (DS_BI->description);
 
-  B->commands_num = DS_LVAL (DS_BI->commands->cnt);
-  B->commands = talloc (sizeof (struct tgl_bot_command) * B->commands_num);
-  int i;
-  for (i = 0; i < B->commands_num; i++) {
-    struct tl_ds_bot_command *BC = DS_BI->commands->data[i];
-    B->commands[i].command = DS_STR_DUP (BC->command);
-    B->commands[i].description = DS_STR_DUP (BC->description);
+  B->commands_num = DS_BI->commands ? DS_LVAL (DS_BI->commands->cnt) : 0;
+  if (B->commands_num > 0) {
+    B->commands = talloc (sizeof (struct tgl_bot_command) * B->commands_num);
+    int i;
+    for (i = 0; i < B->commands_num; i++) {
+      struct tl_ds_bot_command *BC = DS_BI->commands->data[i];
+      B->commands[i].command = DS_STR_DUP (BC->command);
+      B->commands[i].description = DS_STR_DUP (BC->description);
+    }
+  } else {
+    B->commands = NULL;
   }
   return B;
 }
