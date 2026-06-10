@@ -153,35 +153,34 @@ void tglu_work_update (struct tgl_state *TLS, int check_only, struct tl_ds_updat
   }
 
   if (DS_U->pts && DS_U->pts_count) {
-    int channel_id;
+    int channel_id = 0;
     if (DS_U->channel_id) {
       channel_id = DS_LVAL (DS_U->channel_id);
     } else if (DS_U->magic == CODE_update_read_history_outbox) {
       vlogprintf (E_WARNING, "updateReadHistoryOutbox not supported yet\n");
       return;
+    } else if (DS_U->magic == 0x9961fd5c) {
+      vlogprintf (E_WARNING, "tglu_work_update skip updateReadHistoryInbox\n");
+      return;
+    } else if (DS_U->magic == 0xe40370a3) {
+      /* updateEditMessage: non-channel edit, global pts checked above, no channel pts needed */
     } else {
       vlogprintf (E_WARNING, "tglu_work_update with magic 0x%08x\n", DS_U->magic);
-      if (DS_U->magic == 0x9961fd5c) {
-        vlogprintf (E_WARNING, "tglu_work_update skip updateReadHistoryInbox\n");
-        return;
-      }
-      if (DS_U->magic == 0xe40370a3) {
-        vlogprintf (E_WARNING, "tglu_work_update skip updateEditMessage\n");
-        return;
-      }
       if (DS_U->message == NULL) return;
       if (!DS_U->message->peer_id) return;
       if (DS_U->message->peer_id->magic != CODE_peer_channel) return;
       channel_id = DS_LVAL (DS_U->message->peer_id->channel_id);
     }
 
-    tgl_peer_t *E = tgl_peer_get (TLS, TGL_MK_CHANNEL (channel_id));
-    if (!E) {
-      return;
-    }
+    if (channel_id) {
+      tgl_peer_t *E = tgl_peer_get (TLS, TGL_MK_CHANNEL (channel_id));
+      if (!E) {
+        return;
+      }
 
-    if (!check_only && tgl_check_channel_pts_diff (TLS, E, DS_LVAL (DS_U->pts), DS_LVAL (DS_U->pts_count)) <= 0) {
-      return;
+      if (!check_only && tgl_check_channel_pts_diff (TLS, E, DS_LVAL (DS_U->pts), DS_LVAL (DS_U->pts_count)) <= 0) {
+        return;
+      }
     }
   }
 
@@ -513,6 +512,29 @@ void tglu_work_update (struct tgl_state *TLS, int check_only, struct tl_ds_updat
       struct tgl_message *M = tglf_fetch_alloc_message (TLS, DS_U->message, &new_msg);
       if (M && new_msg) {
         bl_do_msg_update (TLS, &M->permanent_id);
+      }
+    }
+    break;
+  case 0xe40370a3: /* CODE_update_edit_message */
+  case 0x1b3f4df7: /* CODE_update_edit_channel_message */
+    {
+      int new_msg = 0;
+      struct tgl_message *M = tglf_fetch_alloc_message (TLS, DS_U->message, &new_msg);
+      if (M) {
+        if (!new_msg) {
+          int eflags = (M->flags & 0xffff) | TGLMF_CREATED | TGLMF_EDITED;
+          bl_do_edit_message (TLS, &M->permanent_id,
+            NULL, NULL, NULL, NULL, NULL,
+            DS_STR (DS_U->message->message),
+            NULL, NULL, NULL, NULL,
+            DS_U->message->reply_markup,
+            (void *)DS_U->message->entities,
+            eflags
+          );
+        } else {
+          M->flags |= TGLMF_EDITED;
+        }
+        bl_do_msg_edit_update (TLS, &M->permanent_id);
       }
     }
     break;

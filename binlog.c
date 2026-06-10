@@ -338,6 +338,7 @@ void bl_do_edit_message (struct tgl_state *TLS, tgl_message_id_t *id, tgl_peer_i
   } 
 
   if (message) {
+    if (M->message) { tfree_str (M->message); }
     M->message_len = message_len;
     M->message = tstrndup (message, message_len);
     assert (!(M->flags & TGLMF_SERVICE));
@@ -483,7 +484,7 @@ void bl_do_msg_update (struct tgl_state *TLS, tgl_message_id_t *id) /* {{{ */ {
   struct tgl_message *M = tgl_message_get (TLS, id);
   if (!M) { return; }
   assert (M);
-  
+
   if (!(M->flags & TGLMF_ENCRYPTED)) {
     if (TLS->max_msg_id < M->server_id) {
       TLS->max_msg_id = M->server_id;
@@ -492,6 +493,16 @@ void bl_do_msg_update (struct tgl_state *TLS, tgl_message_id_t *id) /* {{{ */ {
 
   if (TLS->callback.msg_receive) {
     TLS->callback.msg_receive (TLS, M);
+  }
+}
+/* }}} */
+
+void bl_do_msg_edit_update (struct tgl_state *TLS, tgl_message_id_t *id) /* {{{ */ {
+  struct tgl_message *M = tgl_message_get (TLS, id);
+  if (!M) { return; }
+
+  if (TLS->callback.edit_msg) {
+    TLS->callback.edit_msg (TLS, M);
   }
 }
 /* }}} */

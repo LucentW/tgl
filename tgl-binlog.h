@@ -52,6 +52,7 @@ void bl_do_chat_add_user (struct tgl_state *TLS, tgl_peer_id_t id, int version, 
 void bl_do_chat_del_user (struct tgl_state *TLS, tgl_peer_id_t id, int version, int user);
 
 void bl_do_msg_update (struct tgl_state *TLS, struct tgl_message_id *id);
+void bl_do_msg_edit_update (struct tgl_state *TLS, struct tgl_message_id *id);
 void bl_do_reset_authorization (struct tgl_state *TLS);
 
 

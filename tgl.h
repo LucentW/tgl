@@ -115,6 +115,7 @@ struct tgl_update_callback {
   void (*user_update)(struct tgl_state *TLS, struct tgl_user *C, unsigned flags);
   void (*secret_chat_update)(struct tgl_state *TLS, struct tgl_secret_chat *C, unsigned flags);
   void (*msg_receive)(struct tgl_state *TLS, struct tgl_message *M);
+  void (*edit_msg)(struct tgl_state *TLS, struct tgl_message *M);
   void (*our_id)(struct tgl_state *TLS, tgl_peer_id_t id);
   void (*notification)(struct tgl_state *TLS, const char *type, const char *message);
   void (*user_status_update)(struct tgl_state *TLS, struct tgl_user *U);
