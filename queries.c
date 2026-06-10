@@ -1342,7 +1342,7 @@ static int mark_read_channels_on_receive (struct tgl_state *TLS, struct query *q
   struct mark_read_extra *E = q->extra;
 
   bl_do_channel (TLS, tgl_get_peer_id (E->id), NULL, NULL, NULL, 0, NULL, 0, NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL,
-    &E->max_id, TGL_FLAGS_UNCHANGED);
+    &E->max_id, NULL, TGL_FLAGS_UNCHANGED);
   
   if (q->callback) {
     ((void (*)(struct tgl_state *, void *, int))q->callback)(TLS, q->callback_extra, 1);
