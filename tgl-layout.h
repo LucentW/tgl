@@ -395,6 +395,7 @@ struct tgl_channel {
   int kicked_count;
 
   int pts;
+  long long linked_chat_id;
 };
 
 struct tgl_chat_user {

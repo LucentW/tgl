@@ -751,6 +751,7 @@ struct tgl_channel *tglf_fetch_alloc_channel (struct tgl_state *TLS, struct tl_d
     NULL,
     NULL, 0,
     NULL, NULL, NULL, NULL,
+    NULL,
     flags
   );
 
@@ -793,6 +794,7 @@ struct tgl_channel *tglf_fetch_alloc_channel_full (struct tgl_state *TLS, struct
     DS_CF->admins_count,
     DS_CF->kicked_count,
     DS_CF->read_inbox_max_id,
+    DS_CF->linked_chat_id,
     TGL_FLAGS_UNCHANGED
   );
 

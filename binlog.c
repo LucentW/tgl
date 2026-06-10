@@ -915,7 +915,7 @@ void bl_do_encr_chat (struct tgl_state *TLS, int id, long long *access_hash, int
 }
 /* }}} */
 
-void bl_do_channel (struct tgl_state *TLS, long long id, long long *access_hash, int *date, const char *title, int title_len, const char *username, int username_len, struct tl_ds_chat_photo *chat_photo, struct tl_ds_photo *photo, int *version, char *about, int about_len, int *participants_count, int *admins_count, int *kicked_count, int *last_read_in, int flags) /* {{{ */ {
+void bl_do_channel (struct tgl_state *TLS, long long id, long long *access_hash, int *date, const char *title, int title_len, const char *username, int username_len, struct tl_ds_chat_photo *chat_photo, struct tl_ds_photo *photo, int *version, char *about, int about_len, int *participants_count, int *admins_count, int *kicked_count, int *last_read_in, long long *linked_chat_id, int flags) /* {{{ */ {
   tgl_peer_t *_U = tgl_peer_get (TLS, TGL_MK_CHANNEL (id));
 
   unsigned updates = 0;
@@ -1022,7 +1022,11 @@ void bl_do_channel (struct tgl_state *TLS, long long id, long long *access_hash,
     C->last_read_in = *last_read_in;
     tgls_messages_mark_read (TLS, C->last, 0, C->last_read_in);
   }
-  
+
+  if (linked_chat_id) {
+    C->linked_chat_id = *linked_chat_id;
+  }
+
   if (TLS->callback.channel_update && updates) {
     TLS->callback.channel_update (TLS, C, updates);
   }
