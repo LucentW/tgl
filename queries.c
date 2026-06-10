@@ -1423,7 +1423,7 @@ void tgl_do_messages_mark_read (struct tgl_state *TLS, tgl_peer_id_t id, int max
     out_int (CODE_channels_read_history);
 
     out_int (CODE_input_channel);
-    out_int (tgl_get_peer_id (id));
+    out_long ((long long)tgl_get_peer_id (id));
     out_long (id.access_hash);
     
     out_int (max_id);
@@ -1603,7 +1603,7 @@ static void _tgl_do_get_history (struct tgl_state *TLS, struct get_history_extra
     out_int (CODE_channels_get_messages);
 
     out_int (CODE_input_channel);
-    out_int (tgl_get_peer_id (E->id));
+    out_long ((long long)tgl_get_peer_id (E->id));
     out_long (E->id.access_hash);
   }
   out_int (E->max_id);
@@ -1879,7 +1879,7 @@ static void send_avatar_end (struct tgl_state *TLS, struct send_file *f, void *c
   switch (tgl_get_peer_type (f->avatar)) {
   case TGL_PEER_CHAT:
     out_int (CODE_messages_edit_chat_photo);
-    out_int (f->avatar.peer_id);
+    out_long (f->avatar.peer_id);
     out_int (CODE_input_chat_uploaded_photo);
     break;
   case TGL_PEER_USER:
@@ -1889,7 +1889,7 @@ static void send_avatar_end (struct tgl_state *TLS, struct send_file *f, void *c
   case TGL_PEER_CHANNEL:
     out_int (CODE_channels_edit_photo);
     out_int (CODE_input_channel);
-    out_int (f->avatar.peer_id);
+    out_long (f->avatar.peer_id);
     out_long (f->avatar.access_hash);
     out_int (CODE_input_chat_uploaded_photo);
     break;
@@ -2749,7 +2749,7 @@ void tgl_do_rename_channel (struct tgl_state *TLS, tgl_peer_id_t id, const char 
   out_int (CODE_channels_edit_title);
   assert (tgl_get_peer_type (id) == TGL_PEER_CHANNEL);
   out_int (CODE_input_channel);
-  out_int (tgl_get_peer_id (id));
+  out_long ((long long)tgl_get_peer_id (id));
   out_long (id.access_hash);
   out_cstring (name, name_len);
   tglq_send_query (TLS, TLS->DC_working, packet_ptr - packet_buffer, packet_buffer, &send_msgs_methods, 0, callback, callback_extra);
@@ -2763,7 +2763,7 @@ void tgl_do_join_channel (struct tgl_state *TLS, tgl_peer_id_t id, void (*callba
   out_int (CODE_channels_join_channel);
   assert (tgl_get_peer_type (id) == TGL_PEER_CHANNEL);
   out_int (CODE_input_channel);
-  out_int (tgl_get_peer_id (id));
+  out_long ((long long)tgl_get_peer_id (id));
   out_long (id.access_hash);
   tglq_send_query (TLS, TLS->DC_working, packet_ptr - packet_buffer, packet_buffer, &send_msgs_methods, 0, callback, callback_extra);
 }
@@ -2776,7 +2776,7 @@ void tgl_do_leave_channel (struct tgl_state *TLS, tgl_peer_id_t id, void (*callb
   out_int (CODE_channels_leave_channel);
   assert (tgl_get_peer_type (id) == TGL_PEER_CHANNEL);
   out_int (CODE_input_channel);
-  out_int (tgl_get_peer_id (id));
+  out_long ((long long)tgl_get_peer_id (id));
   out_long (id.access_hash);
   tglq_send_query (TLS, TLS->DC_working, packet_ptr - packet_buffer, packet_buffer, &send_msgs_methods, 0, callback, callback_extra);
 }
@@ -2812,7 +2812,7 @@ void tgl_do_channel_set_username (struct tgl_state *TLS, tgl_peer_id_t id, const
   out_int (CODE_channels_update_username);
   assert (tgl_get_peer_type (id) == TGL_PEER_CHANNEL);
   out_int (CODE_input_channel);
-  out_int (tgl_get_peer_id (id));
+  out_long ((long long)tgl_get_peer_id (id));
   out_long (id.access_hash);
   out_cstring (username, username_len);
   tglq_send_query (TLS, TLS->DC_working, packet_ptr - packet_buffer, packet_buffer, &channels_set_about_methods, 0, callback, callback_extra);
@@ -2827,10 +2827,10 @@ void tgl_do_channel_set_admin (struct tgl_state *TLS, tgl_peer_id_t channel_id, 
   assert (tgl_get_peer_type (user_id) == TGL_PEER_USER);
   out_int (0); /* flags: no rank */
   out_int (CODE_input_channel);
-  out_int (tgl_get_peer_id (channel_id));
+  out_long ((long long)tgl_get_peer_id (channel_id));
   out_long (channel_id.access_hash);
   out_int (CODE_input_user);
-  out_int (tgl_get_peer_id (user_id));
+  out_long ((long long)tgl_get_peer_id (user_id));
   out_long (user_id.access_hash);
   /* ChatAdminRights flags: post=1, edit=2, delete=3, ban=4, invite=5, pin=7, addadmins=9, manage=11 */
   out_int (CODE_chat_admin_rights);
@@ -2919,7 +2919,7 @@ void _tgl_do_channel_get_members  (struct tgl_state *TLS, struct channel_get_mem
   out_int (CODE_channels_get_participants);
   assert (tgl_get_peer_type (E->id) == TGL_PEER_CHANNEL);
   out_int (CODE_input_channel);
-  out_int (E->id.peer_id);
+  out_long (E->id.peer_id);
   out_long (E->id.access_hash);
 
   switch (E->type) {
@@ -2929,6 +2929,7 @@ void _tgl_do_channel_get_members  (struct tgl_state *TLS, struct channel_get_mem
     break;
   case 3:
     out_int (CODE_channel_participants_kicked);
+    out_cstring ("", 0);
     break;
   case 4:
     out_int (CODE_channel_participants_bots);
@@ -2939,6 +2940,7 @@ void _tgl_do_channel_get_members  (struct tgl_state *TLS, struct channel_get_mem
   }
   out_int (E->offset);
   out_int (E->limit);
+  out_long (0);
   
   tglq_send_query (TLS, TLS->DC_working, packet_ptr - packet_buffer, packet_buffer, &channels_get_members_methods, E, callback, callback_extra);
 }
@@ -3031,7 +3033,7 @@ void tgl_do_get_channel_info (struct tgl_state *TLS, tgl_peer_id_t id, int offli
   out_int (CODE_channels_get_full_channel);
   assert (tgl_get_peer_type (id) == TGL_PEER_CHANNEL);
   out_int (CODE_input_channel);
-  out_int (id.peer_id);
+  out_long (id.peer_id);
   out_long (id.access_hash);
   tglq_send_query (TLS, TLS->DC_working, packet_ptr - packet_buffer, packet_buffer, &channel_info_methods, 0, callback, callback_extra);
 }
@@ -3080,7 +3082,7 @@ void tgl_do_get_user_info (struct tgl_state *TLS, tgl_peer_id_t id, int offline_
   out_int (CODE_users_get_full_user);
   assert (tgl_get_peer_type (id) == TGL_PEER_USER);
   out_int (CODE_input_user);
-  out_int (tgl_get_peer_id (id));
+  out_long ((long long)tgl_get_peer_id (id));
   out_long (id.access_hash);
   tglq_send_query (TLS, TLS->DC_working, packet_ptr - packet_buffer, packet_buffer, &user_info_methods, 0, callback, callback_extra);
 }
@@ -3560,7 +3562,7 @@ void tgl_do_del_contact (struct tgl_state *TLS, tgl_peer_id_t id, void (*callbac
   out_int (CODE_vector);
   out_int (1);
   out_int (CODE_input_user);
-  out_int (tgl_get_peer_id (id));
+  out_long ((long long)tgl_get_peer_id (id));
   out_long (id.access_hash);
   tglq_send_query (TLS, TLS->DC_working, packet_ptr - packet_buffer, packet_buffer, &del_contact_methods, 0, callback, callback_extra);
 }
@@ -3967,7 +3969,7 @@ void tgl_do_get_channel_difference (struct tgl_state *TLS, int id, void (*callba
 
   out_int (CODE_updates_get_channel_difference);
   out_int (CODE_input_channel);
-  out_int (tgl_get_peer_id (E->id));
+  out_long ((long long)tgl_get_peer_id (E->id));
   out_long (E->channel.access_hash);
 
   out_int (CODE_channel_messages_filter_empty);
@@ -4002,7 +4004,7 @@ void tgl_do_add_user_to_chat (struct tgl_state *TLS, tgl_peer_id_t chat_id, tgl_
 
   assert (tgl_get_peer_type (id) == TGL_PEER_USER);
   out_int (CODE_input_user);
-  out_int (tgl_get_peer_id (id));
+  out_long ((long long)tgl_get_peer_id (id));
   out_long (id.access_hash);
   out_int (limit);
 
@@ -4016,7 +4018,7 @@ void tgl_do_del_user_from_chat (struct tgl_state *TLS, tgl_peer_id_t chat_id, tg
 
   assert (tgl_get_peer_type (id) == TGL_PEER_USER);
   out_int (CODE_input_user);
-  out_int (tgl_get_peer_id (id));
+  out_long ((long long)tgl_get_peer_id (id));
   out_long (id.access_hash);
   tglq_send_query (TLS, TLS->DC_working, packet_ptr - packet_buffer, packet_buffer, &send_msgs_methods, 0, callback, callback_extra);
 }
@@ -4029,13 +4031,13 @@ void tgl_do_channel_invite_user (struct tgl_state *TLS, tgl_peer_id_t channel_id
   clear_packet ();
   out_int (CODE_channels_invite_to_channel);
   out_int (CODE_input_channel);
-  out_int (channel_id.peer_id);
+  out_long (channel_id.peer_id);
   out_long (channel_id.access_hash);
 
   out_int (CODE_vector);
   out_int (1);
   out_int (CODE_input_user);
-  out_int (tgl_get_peer_id (id));
+  out_long ((long long)tgl_get_peer_id (id));
   out_long (id.access_hash);
 
   tglq_send_query (TLS, TLS->DC_working, packet_ptr - packet_buffer, packet_buffer, &send_msgs_methods, 0, callback, callback_extra);
@@ -4045,11 +4047,11 @@ void tgl_do_channel_kick_user (struct tgl_state *TLS, tgl_peer_id_t channel_id, 
   clear_packet ();
   out_int (CODE_channels_edit_banned);
   out_int (CODE_input_channel);
-  out_int (channel_id.peer_id);
+  out_long (channel_id.peer_id);
   out_long (channel_id.access_hash);
 
   out_int (CODE_input_peer_user);
-  out_int (tgl_get_peer_id (id));
+  out_long ((long long)tgl_get_peer_id (id));
   out_long (id.access_hash);
 
   /* ChatBannedRights: all view/send/media bits banned, until_date=0 (forever) */
@@ -4096,7 +4098,7 @@ void tgl_do_create_group_chat (struct tgl_state *TLS, int users_num, tgl_peer_id
       return;
     }
     out_int (CODE_input_user);
-    out_int (tgl_get_peer_id (id));
+    out_long ((long long)tgl_get_peer_id (id));
     out_long (id.access_hash);
   }
   out_cstring (chat_topic, chat_topic_len);
@@ -4125,7 +4127,7 @@ void tgl_do_create_channel (struct tgl_state *TLS, int users_num, tgl_peer_id_t 
       return;
     }
     out_int (CODE_input_user);
-    out_int (tgl_get_peer_id (id));
+    out_long ((long long)tgl_get_peer_id (id));
     out_long (id.access_hash);
   }
   tglq_send_query (TLS, TLS->DC_working, packet_ptr - packet_buffer, packet_buffer, &send_msgs_methods, 0, callback, callback_extra);
@@ -4191,7 +4193,7 @@ void tgl_do_delete_msg (struct tgl_state *TLS, tgl_message_id_t *_msg_id, void (
   if (msg_id.peer_type == TGL_PEER_CHANNEL) {
     out_int (CODE_channels_delete_messages);
     out_int (CODE_input_channel);
-    out_int (msg_id.peer_id);
+    out_long (msg_id.peer_id);
     out_long (msg_id.access_hash);
 
     out_int (CODE_vector);
@@ -4274,7 +4276,7 @@ void tgl_do_start_bot (struct tgl_state *TLS, tgl_peer_id_t bot, tgl_peer_id_t c
   clear_packet ();
   out_int (CODE_messages_start_bot);
   out_int (CODE_input_user);
-  out_int (tgl_get_peer_id (bot));
+  out_long ((long long)tgl_get_peer_id (bot));
   out_long (bot.access_hash);
   out_int (tgl_get_peer_id (chat));
   long long m;
@@ -4534,7 +4536,7 @@ void tgl_do_export_channel_link (struct tgl_state *TLS, tgl_peer_id_t id, void (
   out_int (CODE_messages_export_chat_invite);
   out_int (0); /* flags: no optional fields */
   out_int (CODE_input_peer_channel);
-  out_int (tgl_get_peer_id (id));
+  out_long ((long long)tgl_get_peer_id (id));
   out_long (id.access_hash);
 
   tglq_send_query (TLS, TLS->DC_working, packet_ptr - packet_buffer, packet_buffer, &export_chat_link_methods, 0, callback, callback_extra);
@@ -5088,7 +5090,7 @@ void tgl_do_send_broadcast (struct tgl_state *TLS, int num, tgl_peer_id_t peer_i
     assert (tgl_get_peer_type (peer_id[i]) == TGL_PEER_USER);
 
     out_int (CODE_input_user);
-    out_int (tgl_get_peer_id (peer_id[i]));
+    out_long ((long long)tgl_get_peer_id (peer_id[i]));
     out_long (peer_id[i].access_hash);
   }
 
@@ -5134,7 +5136,7 @@ void tgl_do_block_user (struct tgl_state *TLS, tgl_peer_id_t id, void (*callback
 
   out_int (CODE_contacts_block);
   out_int (CODE_input_user);
-  out_int (tgl_get_peer_id (id));
+  out_long ((long long)tgl_get_peer_id (id));
   out_long (id.access_hash);
   tglq_send_query (TLS, TLS->DC_working, packet_ptr - packet_buffer, packet_buffer, &block_user_methods, 0, callback, callback_extra);
 }
@@ -5153,7 +5155,7 @@ void tgl_do_unblock_user (struct tgl_state *TLS, tgl_peer_id_t id, void (*callba
   out_int (CODE_contacts_unblock);
   
   out_int (CODE_input_user);
-  out_int (tgl_get_peer_id (id));
+  out_long ((long long)tgl_get_peer_id (id));
   out_long (id.access_hash);
   tglq_send_query (TLS, TLS->DC_working, packet_ptr - packet_buffer, packet_buffer, &block_user_methods, 0, callback, callback_extra);
 }
