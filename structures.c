@@ -1536,6 +1536,31 @@ void tglf_fetch_message_entities (struct tgl_state *TLS, struct tgl_message *M, 
   }
 }
 
+struct tgl_message *tglf_find_message_for_edit (struct tgl_state *TLS, struct tl_ds_message *DS_M) {
+  if (!DS_M || DS_M->magic == CODE_message_empty || !DS_M->peer_id) { return NULL; }
+  int raw_id = DS_LVAL (DS_M->id);
+  tgl_peer_id_t to_id = tglf_fetch_peer_id (TLS, DS_M->peer_id);
+
+  /* Try sender-indexed key first (how new channel messages are stored) */
+  if (DS_M->from_id) {
+    tgl_peer_id_t from_id = tglf_fetch_peer_id (TLS, DS_M->from_id);
+    tgl_peer_t *F = tgl_peer_get (TLS, from_id);
+    if (F && (F->flags & TGLPF_CREATED)) {
+      tgl_message_id_t mid = tgl_peer_id_to_msg_id (F->id, raw_id);
+      struct tgl_message *M = tgl_message_get (TLS, &mid);
+      if (M) { return M; }
+    }
+  }
+
+  /* Fallback: channel-indexed key (anonymous posts or unknown sender) */
+  tgl_peer_t *T = tgl_peer_get (TLS, to_id);
+  if (T && (T->flags & TGLPF_CREATED)) {
+    tgl_message_id_t mid = tgl_peer_id_to_msg_id (T->id, raw_id);
+    return tgl_message_get (TLS, &mid);
+  }
+  return NULL;
+}
+
 struct tgl_message *tglf_fetch_alloc_message (struct tgl_state *TLS, struct tl_ds_message *DS_M, int *new_msg) {
   if (new_msg) {
     *new_msg = 0;

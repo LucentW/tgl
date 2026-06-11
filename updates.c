@@ -518,22 +518,17 @@ void tglu_work_update (struct tgl_state *TLS, int check_only, struct tl_ds_updat
   case 0xe40370a3: /* CODE_update_edit_message */
   case 0x1b3f4df7: /* CODE_update_edit_channel_message */
     {
-      int new_msg = 0;
-      struct tgl_message *M = tglf_fetch_alloc_message (TLS, DS_U->message, &new_msg);
+      struct tgl_message *M = tglf_find_message_for_edit (TLS, DS_U->message);
       if (M) {
-        if (!new_msg) {
-          int eflags = (M->flags & 0xffff) | TGLMF_CREATED | TGLMF_EDITED;
-          bl_do_edit_message (TLS, &M->permanent_id,
-            NULL, NULL, NULL, NULL, NULL,
-            DS_STR (DS_U->message->message),
-            NULL, NULL, NULL, NULL,
-            DS_U->message->reply_markup,
-            (void *)DS_U->message->entities,
-            eflags
-          );
-        } else {
-          M->flags |= TGLMF_EDITED;
-        }
+        int eflags = (M->flags & 0xffff) | TGLMF_CREATED | TGLMF_EDITED;
+        bl_do_edit_message (TLS, &M->permanent_id,
+          NULL, NULL, NULL, NULL, NULL,
+          DS_STR (DS_U->message->message),
+          NULL, NULL, NULL, NULL,
+          DS_U->message->reply_markup,
+          (void *)DS_U->message->entities,
+          eflags
+        );
         bl_do_msg_edit_update (TLS, &M->permanent_id);
       }
     }
