@@ -533,6 +533,46 @@ void tglu_work_update (struct tgl_state *TLS, int check_only, struct tl_ds_updat
       }
     }
     break;
+  case CODE_update_message_reactions:
+    {
+      struct tl_ds_peer *peer = (struct tl_ds_peer *)DS_U->peer;
+      if (!peer) { break; }
+      tgl_peer_id_t peer_id = tglf_fetch_peer_id (TLS, peer);
+      int raw_msg_id = DS_LVAL ((int *)DS_U->msg_id);
+      struct tl_ds_message_reactions *MR = DS_U->reactions;
+      int cnt = (MR && MR->results) ? DS_LVAL (MR->results->cnt) : 0;
+      struct tgl_reaction *reactions = cnt ? talloc0 (cnt * sizeof (struct tgl_reaction)) : NULL;
+      int reactions_num = 0;
+      for (int i = 0; i < cnt; i++) {
+        struct tl_ds_reaction_count *RC = MR->results->data[i];
+        if (!RC || !RC->reaction) { continue; }
+        struct tgl_reaction *R = &reactions[reactions_num];
+        switch (RC->reaction->magic) {
+          case 0x1b2286b8: /* reactionEmoji */
+            R->type = TGL_REACTION_EMOJI;
+            R->emoji = RC->reaction->emoticon ? tstrndup (RC->reaction->emoticon->data, RC->reaction->emoticon->len) : NULL;
+            break;
+          case 0x8935fc73: /* reactionCustomEmoji */
+            R->type = TGL_REACTION_CUSTOM;
+            R->doc_id = RC->reaction->document_id ? *RC->reaction->document_id : 0;
+            break;
+          case 0x523da4eb: /* reactionPaid */
+            R->type = TGL_REACTION_PAID;
+            break;
+          default:
+            continue;
+        }
+        R->count = DS_LVAL (RC->count);
+        R->chosen = (RC->chosen_order != NULL);
+        reactions_num++;
+      }
+      bl_do_msg_reactions_update (TLS, peer_id, raw_msg_id, reactions_num, reactions);
+      for (int i = 0; i < reactions_num; i++) {
+        if (reactions[i].emoji) { tfree_str (reactions[i].emoji); }
+      }
+      if (reactions) { tfree (reactions, cnt * sizeof (struct tgl_reaction)); }
+    }
+    break;
   case CODE_update_read_channel_inbox:
     break;
   case CODE_update_delete_channel_messages:

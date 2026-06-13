@@ -613,6 +613,18 @@ struct tgl_message_media {
 #define TGL_KB_BUTTON_URL      1
 #define TGL_KB_BUTTON_CALLBACK 2
 
+#define TGL_REACTION_EMOJI  1
+#define TGL_REACTION_CUSTOM 2
+#define TGL_REACTION_PAID   3
+
+struct tgl_reaction {
+  int type;
+  char *emoji;
+  long long doc_id;
+  int count;
+  int chosen;
+};
+
 struct tgl_keyboard_button {
   char *text;
   char *url;

@@ -507,6 +507,13 @@ void bl_do_msg_edit_update (struct tgl_state *TLS, tgl_message_id_t *id) /* {{{ 
 }
 /* }}} */
 
+void bl_do_msg_reactions_update (struct tgl_state *TLS, tgl_peer_id_t peer_id, int msg_id, int reactions_num, struct tgl_reaction *reactions) /* {{{ */ {
+  if (TLS->callback.msg_reactions) {
+    TLS->callback.msg_reactions (TLS, peer_id, msg_id, reactions_num, reactions);
+  }
+}
+/* }}} */
+
 void bl_do_reset_authorization (struct tgl_state *TLS) /* {{{ */ {
   int i;
   for (i = 0; i <= TLS->max_dc_num; i++) if (TLS->DC_list[i]) {
