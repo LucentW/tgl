@@ -5676,6 +5676,31 @@ void tgl_set_phone_number_cb (struct tgl_state *TLS, void *extra, int success, c
   TLS->callback.get_values (TLS, tgl_code, "code:", 1, tgl_set_number_code, E);
 }
 
+/* {{{ Send reaction */
+
+void tgl_do_send_reaction (struct tgl_state *TLS, tgl_message_id_t *msg_id, const char *emoji, void (*callback)(struct tgl_state *TLS, void *callback_extra, int success), void *callback_extra) {
+  tgl_peer_id_t peer_id = tgl_msg_id_to_peer_id (*msg_id);
+  clear_packet ();
+  out_int (CODE_messages_send_reaction);
+  int flags = (1 << 2); /* add_to_recent */
+  if (emoji && *emoji) { flags |= (1 << 0); } /* reaction field present */
+  out_int (flags);
+  out_peer_id (TLS, peer_id);
+  out_int (msg_id->id);
+  if (emoji && *emoji) {
+    out_int (CODE_vector);
+    out_int (1);
+    if (strcmp (emoji, "paid") == 0) {
+      out_int (CODE_reaction_paid);
+    } else {
+      out_int (CODE_reaction_emoji);
+      out_cstring (emoji, strlen (emoji));
+    }
+  }
+  tglq_send_query (TLS, TLS->DC_working, packet_ptr - packet_buffer, packet_buffer, &send_msgs_methods, NULL, callback, callback_extra);
+}
+/* }}} */
+
 void tgl_do_set_phone_number (struct tgl_state *TLS, const char *phonenumber, int phonenumber_len, void (*callback)(struct tgl_state *TLS, void *callback_extra, int success), void *callback_extra) {
   struct change_phone_extra *E = talloc0 (sizeof (*E));
   E->phone_len = phonenumber_len;
