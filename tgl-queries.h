@@ -271,8 +271,8 @@ void tgl_do_msg_search (struct tgl_state *TLS, tgl_user_or_chat_id_t id, int fro
 // deletes message *id*
 void tgl_do_delete_msg (struct tgl_state *TLS, tgl_message_id_t *msg_id, void (*callback)(struct tgl_state *TLS, void *callback_extra, int success), void *callback_extra);
 
-// sends reaction *emoji* on message *msg_id*; empty/NULL emoji removes reaction
-void tgl_do_send_reaction (struct tgl_state *TLS, tgl_message_id_t *msg_id, const char *emoji, void (*callback)(struct tgl_state *TLS, void *callback_extra, int success), void *callback_extra);
+// sends reactions on message *msg_id*; count=0 removes all reactions
+void tgl_do_send_reaction (struct tgl_state *TLS, tgl_message_id_t *msg_id, const char **emojis, int count, void (*callback)(struct tgl_state *TLS, void *callback_extra, int success), void *callback_extra);
 
 // gets message by *id*
 void tgl_do_get_message (struct tgl_state *TLS, tgl_message_id_t *msg_id, void (*callback)(struct tgl_state *TLS, void *callback_extra, int success, struct tgl_message *M), void *callback_extra);

@@ -5678,23 +5678,29 @@ void tgl_set_phone_number_cb (struct tgl_state *TLS, void *extra, int success, c
 
 /* {{{ Send reaction */
 
-void tgl_do_send_reaction (struct tgl_state *TLS, tgl_message_id_t *msg_id, const char *emoji, void (*callback)(struct tgl_state *TLS, void *callback_extra, int success), void *callback_extra) {
+static void out_reaction (const char *emoji) {
+  if (strcmp (emoji, "paid") == 0) {
+    out_int (CODE_reaction_paid);
+  } else {
+    out_int (CODE_reaction_emoji);
+    out_cstring (emoji, strlen (emoji));
+  }
+}
+
+void tgl_do_send_reaction (struct tgl_state *TLS, tgl_message_id_t *msg_id, const char **emojis, int count, void (*callback)(struct tgl_state *TLS, void *callback_extra, int success), void *callback_extra) {
   tgl_peer_id_t peer_id = tgl_msg_id_to_peer_id (*msg_id);
   clear_packet ();
   out_int (CODE_messages_send_reaction);
   int flags = (1 << 2); /* add_to_recent */
-  if (emoji && *emoji) { flags |= (1 << 0); } /* reaction field present */
+  if (count > 0) { flags |= (1 << 0); }
   out_int (flags);
   out_peer_id (TLS, peer_id);
   out_int (msg_id->id);
-  if (emoji && *emoji) {
+  if (count > 0) {
     out_int (CODE_vector);
-    out_int (1);
-    if (strcmp (emoji, "paid") == 0) {
-      out_int (CODE_reaction_paid);
-    } else {
-      out_int (CODE_reaction_emoji);
-      out_cstring (emoji, strlen (emoji));
+    out_int (count);
+    for (int i = 0; i < count; i++) {
+      out_reaction (emojis[i]);
     }
   }
   tglq_send_query (TLS, TLS->DC_working, packet_ptr - packet_buffer, packet_buffer, &send_msgs_methods, NULL, callback, callback_extra);
